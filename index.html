@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Nordic Homes — QC-3 Module Checklist</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;min-height:100vh}
+.top-bar{background:#1a1a2e;color:#fff;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:100}
+.top-bar-left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.top-bar-title{font-size:15px;font-weight:700}
+.top-bar-sub{font-size:11px;opacity:0.6}
+.top-bar-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.module-select{padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;cursor:pointer;font-family:Arial}
+.module-select option{background:#1a1a2e;color:#fff}
+.drive-btn{font-size:12px;padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);cursor:pointer;background:transparent;color:#fff;font-family:Arial}
+.drive-btn.connected{background:#1D9E75;border-color:#1D9E75}
+.btn-save{padding:7px 16px;border:1px solid #378ADD;border-radius:8px;background:#378ADD;color:#fff;font-size:13px;cursor:pointer;font-family:Arial}
+.btn-save:hover{background:#2570c0}
+.btn-export{padding:7px 16px;border:1px solid #1D9E75;border-radius:8px;background:#1D9E75;color:#fff;font-size:13px;cursor:pointer;font-family:Arial;font-weight:700}
+.btn-export:hover{background:#178a64}
+.save-status{font-size:11px;color:#aaa}
+.container{max-width:960px;margin:0 auto;padding:16px}
+.drive-info{background:#e8f4ff;border:1px solid #b3d4f5;border-radius:8px;padding:10px 14px;font-size:12px;color:#1a5a8a;margin-bottom:14px}
+.overview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.overview-card{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:all 0.15s}
+.overview-card:hover{border-color:#1a1a2e}
+.overview-card.active-mod{border-color:#1a1a2e;border-width:2px}
+.overview-card .mod-name{font-size:14px;font-weight:700;margin-bottom:6px}
+.overview-card .mod-ok{color:#1D9E75;font-size:12px}
+.overview-card .mod-rej{color:#E24B4A;font-size:12px}
+.overview-card .mod-pend{color:#EF9F27;font-size:12px}
+.overview-card .mod-bar{background:#eee;border-radius:3px;height:4px;margin-top:6px;overflow:hidden}
+.overview-card .mod-bar-fill{height:100%;background:#1D9E75;border-radius:3px}
+.card{background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:16px 20px;margin-bottom:14px}
+.meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.meta-row input{flex:1;min-width:150px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:Arial}
+.meta-row input:focus{outline:none;border-color:#1a1a2e}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px}
+.stat{background:#f8f8f8;border-radius:8px;padding:10px;text-align:center;border:1px solid #eee}
+.stat .val{font-size:22px;font-weight:700}
+.stat .lbl{font-size:11px;color:#888;margin-top:2px}
+.stat.ok .val{color:#1D9E75}
+.stat.rej .val{color:#E24B4A}
+.stat.pend .val{color:#EF9F27}
+.progress-bar{background:#eee;border-radius:4px;height:7px;overflow:hidden;margin-bottom:4px}
+.progress-fill{height:100%;background:#1D9E75;border-radius:4px;transition:width 0.4s}
+.prog-text{font-size:12px;color:#888;margin-bottom:14px}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.filter-btn{padding:5px 14px;border:1px solid #ddd;border-radius:20px;background:#fff;color:#666;font-size:12px;cursor:pointer}
+.filter-btn.active{background:#1a1a2e;border-color:#1a1a2e;color:#fff}
+.item{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:13px 15px;margin-bottom:8px}
+.item.accepted{border-left:4px solid #1D9E75}
+.item.rejected{border-left:4px solid #E24B4A}
+.item.na{border-left:4px solid #aaa;opacity:0.7}
+.item-top{display:flex;align-items:flex-start;gap:10px}
+.item-num{font-size:11px;font-weight:700;color:#aaa;min-width:24px;padding-top:2px}
+.item-sec-badge{font-size:10px;padding:2px 8px;border-radius:10px;background:#f0f0f0;color:#666;white-space:nowrap;flex-shrink:0;margin-top:1px}
+.item-desc{flex:1;font-size:13px;line-height:1.5}
+.item-actions{display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.btn-accept{padding:5px 13px;border:1px solid #ccc;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;color:#555;font-family:Arial}
+.btn-accept:hover{background:#f0faf5}
+.btn-accept.active{background:#e6f7f0;border-color:#1D9E75;color:#1D9E75;font-weight:700}
+.btn-reject{padding:5px 13px;border:1px solid #ccc;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;color:#555;font-family:Arial}
+.btn-reject:hover{background:#fff5f5}
+.btn-reject.active{background:#fef0f0;border-color:#E24B4A;color:#E24B4A;font-weight:700}
+.btn-photo{padding:5px 11px;border:1px dashed #aaa;border-radius:7px;font-size:12px;cursor:pointer;background:transparent;color:#666;font-family:Arial}
+.btn-photo:hover{background:#f5f5f5}
+.notes-inp{flex:1;min-width:130px;padding:5px 10px;border:1px solid #ddd;border-radius:7px;font-size:12px;font-family:Arial}
+.notes-inp:focus{outline:none;border-color:#1a1a2e}
+.btn-del{padding:4px 9px;border:1px solid #fcc;border-radius:7px;font-size:11px;cursor:pointer;background:#fff8f8;color:#E24B4A;font-family:Arial}
+.btn-na{padding:5px 13px;border:1px solid #ccc;border-radius:7px;font-size:12px;cursor:pointer;background:#fff;color:#888;font-family:Arial}
+.btn-na:hover{background:#f5f5f5}
+.btn-na.active{background:#f0f0f0;border-color:#888;color:#555;font-weight:700}
+.photos-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.thumb{position:relative;width:68px;height:68px;border-radius:7px;overflow:hidden;border:1px solid #ddd;flex-shrink:0}
+.thumb img{width:100%;height:100%;object-fit:cover;cursor:pointer;display:block}
+.thumb .del-p{position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.65);border:none;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;cursor:pointer;line-height:1.5}
+.add-form{background:#f9f9f9;border:1px solid #e0e0e0;border-radius:10px;padding:15px;margin-top:10px}
+.add-form h3{font-size:13px;font-weight:700;margin-bottom:10px;color:#444}
+.add-form .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.add-form input,.add-form textarea{padding:7px 10px;border:1px solid #ddd;border-radius:7px;background:#fff;font-size:13px;font-family:Arial}
+.btn-add{padding:8px 18px;border:1px solid #1a1a2e;border-radius:7px;background:#1a1a2e;color:#fff;font-size:13px;cursor:pointer;font-family:Arial}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center}
+.lightbox.open{display:flex}
+.lightbox img{max-width:92%;max-height:92%;border-radius:8px}
+.lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:32px;cursor:pointer;background:none;border:none;line-height:1}
+.cam-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000;z-index:9990;flex-direction:column;align-items:center;justify-content:space-between;height:100dvh}
+.cam-modal.open{display:flex}
+.cam-video{width:100%;flex:1;min-height:0;object-fit:cover;background:#111}
+.cam-bottom{width:100%;padding:16px 20px;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));background:#111;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+.cam-shoot{width:72px;height:72px;border-radius:50%;border:4px solid #fff;background:#fff;cursor:pointer;flex-shrink:0;font-size:28px;display:flex;align-items:center;justify-content:center}
+.cam-count{color:#fff;font-size:13px;text-align:center;min-width:60px}
+.cam-done{padding:12px 20px;border:2px solid #1D9E75;border-radius:10px;background:#1D9E75;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:Arial}
+.cam-close{padding:12px 20px;border:2px solid #aaa;border-radius:10px;background:transparent;color:#fff;font-size:14px;cursor:pointer;font-family:Arial}
+.cam-top{width:100%;padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top,0px));background:#111;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.cam-title{color:#fff;font-size:14px;font-weight:700}
+.cam-previews{display:flex;gap:6px;overflow-x:auto;padding:8px 16px;background:#222;width:100%;height:80px;min-height:80px;align-items:center;flex-shrink:0}
+.cam-thumb{width:60px;height:60px;border-radius:6px;object-fit:cover;flex-shrink:0;border:2px solid #555}
+#photo-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;align-items:flex-end;justify-content:center}
+@media(max-width:600px){.item-actions{gap:4px}.meta-row input{min-width:100%}}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="top-bar-left">
+    <div>
+      <div class="top-bar-title" id="project-title">Nordic Homes — QC-3</div>
+      <div class="top-bar-sub">Module Checklist</div>
+    </div>
+    <select class="module-select" id="project-select" onchange="switchProject(this.value)" style="background:rgba(255,255,255,0.15);font-weight:700">
+      <option value="ISL_Holaborg">ISL Holaborg</option>
+      <option value="ISL_Jorfi">ISL Jorfi</option>
+      <option value="ISL_Mariuborg">ISL Mariuborg</option>
+    </select>
+    <select class="module-select" id="module-select" onchange="switchModule(this.value)">
+      <option value="">— Select module —</option>
+    </select>
+  </div>
+  <div class="top-bar-right">
+    <span class="save-status" id="save-status"></span>
+    <button class="drive-btn" id="drive-btn" onclick="handleMsAuth()">&#9679; Connect OneDrive</button>
+    <button class="btn-save" onclick="recoverPhotos()" title="Scan OneDrive and restore missing photo links">&#128247; Recover Photos</button>
+    <button class="btn-save" onclick="saveToDrive()">&#8679; Save</button>
+    <button class="btn-export" onclick="exportProtocol()">&#8681; Export Protocol</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="drive-info" id="drive-info" style="display:none">
+    &#10003; Connected to OneDrive. Data saved to <strong id="drive-folder-name">Nordic_QC3</strong>. &nbsp;<span id="drive-folder-link"></span>
+  </div>
+
+  <div class="overview-grid" id="overview-grid"></div>
+
+  <div id="module-content" style="display:none">
+    <div class="card">
+      <div class="meta-row">
+        <input type="text" id="inspector-input" placeholder="Quality controller name"/>
+        <input type="text" id="pm-input" placeholder="Project manager name"/>
+        <input type="date" id="date-input"/>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+      <div class="prog-text" id="prog-text">0 of 51 checked (0%)</div>
+      <div class="stats">
+        <div class="stat ok"><div class="val" id="s-ok">0</div><div class="lbl">Accepted</div></div>
+        <div class="stat rej"><div class="val" id="s-rej">0</div><div class="lbl">Rejected</div></div>
+        <div class="stat pend"><div class="val" id="s-pend">51</div><div class="lbl">Pending</div></div>
+        <div class="stat"><div class="val" id="s-na">0</div><div class="lbl">N/A</div></div>
+        <div class="stat"><div class="val" id="s-photos">0</div><div class="lbl">Photos</div></div>
+      </div>
+    </div>
+    <div class="filters">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('pending',this)">Pending</button>
+      <button class="filter-btn" onclick="setFilter('accepted',this)">Accepted</button>
+      <button class="filter-btn" onclick="setFilter('rejected',this)">Rejected</button>
+      <button class="filter-btn" onclick="setFilter('photos',this)">With photos</button>
+      <button class="filter-btn" onclick="setFilter('na',this)">N/A</button>
+    </div>
+    <div id="checklist"></div>
+    <div class="add-form" id="add-item-form">
+      <h3>+ Add new inspection item</h3>
+      <div class="row">
+        <input type="text" id="new-section" placeholder="Section" style="flex:1;min-width:140px"/>
+        <textarea id="new-desc" placeholder="Work description..." rows="2" style="flex:2;min-width:200px;resize:vertical"></textarea>
+      </div>
+      <button class="btn-add" onclick="addItem()">+ Add item</button>
+    </div>
+  </div>
+</div>
+
+<div id="photo-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9998;align-items:flex-end;justify-content:center">
+  <div style="background:#fff;border-radius:16px 16px 0 0;padding:24px 20px 32px;width:100%;max-width:480px;text-align:center">
+    <p style="font-size:15px;font-weight:700;margin-bottom:20px;color:#333">Add photo</p>
+    <button onclick="photoModalChoose('camera')" style="width:100%;padding:16px;border:1.5px solid #1D9E75;border-radius:12px;background:#1D9E75;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:Arial;margin-bottom:10px">📷 Take photo (camera)</button>
+    <button onclick="photoModalChoose('gallery')" style="width:100%;padding:14px;border:1.5px solid #1a1a2e;border-radius:12px;background:#1a1a2e;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:Arial;margin-bottom:10px">🖼 Choose from gallery</button>
+    <button onclick="stopShooting()" style="width:100%;padding:12px;border:1px solid #ddd;border-radius:10px;background:#f5f5f5;color:#666;font-size:14px;cursor:pointer;font-family:Arial">Cancel</button>
+  </div>
+</div>
+
+<div class="cam-modal" id="cam-modal">
+  <div class="cam-top">
+    <span class="cam-title">📷 Camera — Item #<span id="cam-item-label"></span></span>
+    <button class="cam-close" onclick="closeCamera()">✕ Cancel</button>
+  </div>
+  <video class="cam-video" id="cam-video" autoplay playsinline muted></video>
+  <canvas id="cam-canvas" style="display:none"></canvas>
+  <div class="cam-previews" id="cam-previews"><span style="color:#777;font-size:12px">No photos yet</span></div>
+  <div class="cam-bottom">
+    <div class="cam-count" id="cam-count">0 photos</div>
+    <button class="cam-shoot" id="cam-shoot-btn" onclick="shootPhoto()">📷</button>
+    <button class="cam-done" onclick="doneShooting()">Done ✓</button>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="document.getElementById('lightbox').classList.remove('open')">&times;</button>
+  <img id="lightbox-img" src="" alt="Photo"/>
+</div>
+
+<input type="file" id="file-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(event)"/>
+<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotos(event)"/>
+
+<script>
+// ---- MICROSOFT GRAPH CONFIG ----
+const MS_CLIENT_ID='18090634-b157-4e0c-837d-590122ea9eca';
+const MS_TENANT_ID='aac98fec-0701-4329-ad5d-8b1d279eeb6c';
+const MS_SCOPES=['Files.ReadWrite','User.Read'];
+const MS_REDIRECT_URI=window.location.origin+window.location.pathname;
+const GRAPH_BASE='https://graph.microsoft.com/v1.0';
+
+// ---- RESTRICTED USERS ----
+const RESTRICTED_EMAILS=['nordichomesqc3@gmail.com'];
+let currentUserEmail='';
+function isRestricted(){return RESTRICTED_EMAILS.includes(currentUserEmail);}
+
+// ---- CHECKLIST TEMPLATE (51 points — same as GER CS) ----
+const ITEMS_TEMPLATE=[
+  {id:1,section:"Water supply, HVAC",desc:"Water supply and heating networks have been installed in accordance with the drawings. Pipes are marked, and pipe ends are sealed. (Panel table, 1 station)"},
+  {id:2,section:"Water supply, HVAC",desc:"Sewage pipes have been securely fixed with correct slopes. Pipe ends are properly sealed. Sewage pipe water test have been completed."},
+  {id:3,section:"Electricians",desc:"Installation of electrical insulation corrugated pipes in floor or ceiling panels has been carried out in accordance with the drawings and instructions."},
+  {id:4,section:"Frame, panels",desc:"Floor panel insulation has been installed correctly. Vapour membrane strips have been applied in accordance with the drawings and instructions."},
+  {id:5,section:"Frame, panels",desc:"Panel layers conform to the design drawings. Nailing and fixing of the panels comply with the specified nailing instructions. OSB edges have been treated with waterproofing."},
+  {id:6,section:"Module assembly",desc:"The positions of the walls, floor, and ceiling panels correspond to the design. The relative angles between panels are 90°."},
+  {id:7,section:"Module assembly",desc:"Module airtightness complies with project specifications; vapor membrane has been properly glued. Shafts and wall corners are sealed."},
+  {id:8,section:"Module assembly",desc:"Module panel interconnections have been completed in accordance with the specified installation guidelines."},
+  {id:9,section:"Foreman",desc:"Checklists for all module panels have been received (Form No. QC-1)."},
+  {id:10,section:"Quality controller",desc:"Acceptance of the module frame has been carried out in accordance with the project drawings and instructions (Form No. QC-2)."},
+  {id:11,section:"Electricians",desc:"Electrical wiring installation, incl. boreholes, boxes & sealing confirm to project drawings."},
+  {id:12,section:"Water supply, HVAC",desc:"Water supply and sewerage networks have been installed in accordance with the design drawings. Outlet holes, including pipe ends and connection points, are hermetically sealed. Pipes are properly marked."},
+  {id:13,section:"Water supply, HVAC",desc:"Water and heating collectors have been installed. Collector valve markings are clearly indicated, and heating loop / radiator numbers are duplicated for clarity."},
+  {id:14,section:"Water supply, HVAC",desc:"Pressure tests of the water supply network have been completed prior to wall covering with panel materials (Form No. QC-5)."},
+  {id:15,section:"Water supply, HVAC",desc:"Ventilation network installation for the bathroom exhaust is carried out in accordance with the project documentation. Sealing of all duct joints and wall interfaces has been completed to ensure airtightness."},
+  {id:16,section:"Windows / doors",desc:"Windows in walls have been installed in accordance with the project drawings and installation guidelines. Sealing tapes and thermal insulation are applied properly and meet the required standards."},
+  {id:17,section:"Windows / doors",desc:"Installation of entrance door frames complies with the design drawings and manufacturer's instructions. Insulation has been correctly installed, and the frames are properly protected."},
+  {id:18,section:"Windows / doors",desc:"Internal window sills have been installed. Finishing around windows and doorways is complete."},
+  {id:19,section:"Frame interior finish",desc:"Thermal insulation in the interior walls has been installed correctly, without gaps. Insulation characteristics have been verified. Additional plywood reinforcements have been attached if needed."},
+  {id:20,section:"Frame interior finish",desc:"The plasterboard layout conforms to the design drawings. Seam widths are less than 2 mm. Screw spacing and depth are in accordance with installation guidelines."},
+  {id:21,section:"Frame interior finish",desc:"The ceiling perimeter and electrical corrugated conduits have been properly sealed."},
+  {id:22,section:"Int. finishing, painting",desc:"Seams in the plasterboard have been primed. Joint tape and metal corner installations have been carried out according to standard installation practices."},
+  {id:23,section:"Frame exterior finish",desc:"External wall thermal insulation has been properly installed with no gaps. Specified insulation properties, such as thermal conductivity (λ) and thickness, have been observed and confirmed."},
+  {id:24,section:"Frame exterior finish",desc:"The cladding of the module's outer frame has been installed in accordance with the design drawings. Nailing spacing has been followed as specified."},
+  {id:25,section:"Electricians",desc:"Distribution box installation is complete. Electrical corrugated conduits have been installed, branch boxes assembled, cables marked, and grounding system properly connected."},
+  {id:26,section:"Water supply, HVAC",desc:"Underfloor heating pipe installation complies with the design documentation. Pressure testing has been successfully carried out, where pipe loops are connected to the manifold box."},
+  {id:27,section:"Black floor",desc:"Floor gypsum plates has been laid in both the main room and the bathroom. The layers are bonded together."},
+  {id:28,section:"Water supply, HVAC",desc:"Ventilation network installation for the living room is carried out in accordance with the project documentation. Sealing of all duct joints and wall interfaces has been completed to ensure airtightness."},
+  {id:29,section:"Suspended ceiling",desc:"Installation of suspended ceiling profiles in corresponds to the drawings. Profiles leveled and attached."},
+  {id:30,section:"Suspended ceiling",desc:"Ceiling panel installation is in accordance with the project drawings."},
+  {id:31,section:"Tiling",desc:"Bathroom slopes have been formed in accordance with applicable standards. Waterproofing has been installed following the specified technology."},
+  {id:32,section:"Tiling",desc:"WC tiles have been installed correctly in accordance with the tile layouts and specified technology. Grouting and silicone sealing have been completed."},
+  {id:33,section:"Frame exterior finish",desc:"The insulation between modules has been installed in accordance with the design drawings."},
+  {id:34,section:"Frame exterior finish",desc:"The diffusion membrane has been installed on the exterior walls. Joints are properly aligned, and joint tape has been applied."},
+  {id:35,section:"Exterior finish",desc:"The external window and door sills have been installed in accordance with the design drawings. Fasteners have been applied as per the manufacturer's instructions."},
+  {id:36,section:"Exterior finish",desc:"Facade lathing has been installed in accordance with the design drawings."},
+  {id:37,section:"Int. finishing, painting",desc:"The painted wall finish has been completed. No visible defects were observed at the time of inspection."},
+  {id:38,section:"Int. finishing, painting",desc:"The painted ceiling finish has been completed. No visible defects were observed at the time of inspection."},
+  {id:39,section:"Furniture, floor finish",desc:"The substrate for the flooring has been prepared. Flooring has been installed and adhered according to the manufacturer's guidelines and layout specifications. No visible defects were observed."},
+  {id:40,section:"Furniture",desc:"Furniture assembly has been completed according to the project specifications. Cabinets are securely fixed, fittings are functional, and adjustments have been performed."},
+  {id:41,section:"Finishing, furniture",desc:"Assembly of interior doors has been completed. Door hardware conforms to the design specifications."},
+  {id:42,section:"Finishing, furniture",desc:"Skirting boards and door moldings have been installed in accordance with the specified installation procedures. Joints have been properly executed."},
+  {id:43,section:"Bathroom finishing",desc:"Installation of bathroom furniture and equipment has been completed as per the project specifications and manufacturer's guidelines."},
+  {id:44,section:"Bathroom finishing",desc:"Glass partitions for the bathroom shower have been installed in accordance with the design drawings and manufacturer's specifications. All fittings are functioning correctly."},
+  {id:45,section:"Temporary roof",desc:"Installation of temporary roofing material has been completed."},
+  {id:46,section:"Water supply, HVAC",desc:"Additional measurements of the water supply system were performed with water mixers and shower equipment connected. No leaks were detected or required repair (see Form QC-5)."},
+  {id:47,section:"Electricians",desc:"Installation of sockets, lighting fixtures, and switches has been completed. All electrical equipment has been installed in accordance with specified technical requirements. The distribution box has been connected."},
+  {id:48,section:"Electricians",desc:"The operation of lighting, sockets, and switches has been tested and confirmed to be in full compliance with the project specifications."},
+  {id:49,section:"Electricians, foreman",desc:"Electrical measurements have been performed. No deviations from the standards were recorded (refer to Forms QC-6 and QC-7)."},
+  {id:50,section:"Module packaging",desc:"The module has been cleaned. Equipment, furniture, and accompanying materials have been secured. An inventory check of installed materials has been completed."},
+  {id:51,section:"Module packaging",desc:"Protective frame has been installed. The module has been packed in accordance with the instructions, and the labeling is correct."}
+];
+
+// ---- PROJECTS ----
+const PROJECTS={
+  'ISL_Holaborg':{
+    label:'ISL Holaborg',
+    folder:'ISL_Holaborg_QC',
+    modules:['HLB 1-1','HLB 1-2','HLB 2','HLB 3-1','HLB 3-2','HLB 4','HLB 5-1','HLB 5-2']
+  },
+  'ISL_Jorfi':{
+    label:'ISL Jorfi',
+    folder:'ISL_Jorfi_QC',
+    modules:['JF 1-1','JF 1-2','JF 2','JF 3-1','JF 3-2']
+  },
+  'ISL_Mariuborg':{
+    label:'ISL Mariuborg',
+    folder:'ISL_Mariuborg_QC',
+    modules:['MB 1-1','MB 1-2','MB 2','MB 3-1','MB 3-2']
+  }
+};
+
+let currentProject='ISL_Holaborg';
+function getProjectCfg(){return PROJECTS[currentProject];}
+
+function freshItems(){
+  return ITEMS_TEMPLATE.map(i=>({...i,status:'pending',notes:'',acceptedDate:'',rejectedDate:'',filledBy:'',photoIds:[],photoPreviews:[]}));
+}
+
+let modules={};
+let currentModule=null;
+let filter='all';
+let currentPhotoItemId=null;
+let msConnected=false;
+let msToken=null;
+let msTokenExpiry=0;
+let currentUserId='';
+let rootFolderId=null;
+let moduleFolderIds={};
+let driveFileIds={};
+
+// ---- MICROSOFT AUTH (PKCE) ----
+async function generateCodeVerifier(){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function generateCodeChallenge(verifier){
+  const data=new TextEncoder().encode(verifier);
+  const digest=await crypto.subtle.digest('SHA-256',data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+async function handleMsAuth(){
+  if(msConnected){setStatus('Already connected');return;}
+  const verifier=await generateCodeVerifier();
+  const challenge=await generateCodeChallenge(verifier);
+  sessionStorage.setItem('pkce_verifier',verifier);
+  const params=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    response_type:'code',
+    redirect_uri:MS_REDIRECT_URI,
+    scope:MS_SCOPES.join(' ')+' offline_access',
+    code_challenge:challenge,
+    code_challenge_method:'S256',
+    response_mode:'query'
+  });
+  window.location.href=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
+}
+
+async function exchangeCodeForToken(code){
+  const verifier=sessionStorage.getItem('pkce_verifier');
+  if(!verifier){throw new Error('No PKCE verifier');}
+  const body=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    grant_type:'authorization_code',
+    code,
+    redirect_uri:MS_REDIRECT_URI,
+    code_verifier:verifier,
+    scope:MS_SCOPES.join(' ')+' offline_access'
+  });
+  const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const data=await res.json();
+  if(data.error)throw new Error(data.error_description||data.error);
+  return data;
+}
+
+async function refreshAccessToken(){
+  const rt=localStorage.getItem('ms_refresh_token');
+  if(!rt)throw new Error('No refresh token');
+  const body=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    grant_type:'refresh_token',
+    refresh_token:rt,
+    scope:MS_SCOPES.join(' ')+' offline_access'
+  });
+  const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const data=await res.json();
+  if(data.error)throw new Error(data.error_description||data.error);
+  return data;
+}
+
+function saveTokens(data){
+  msToken=data.access_token;
+  msTokenExpiry=Date.now()+(data.expires_in-300)*1000;
+  if(data.refresh_token)localStorage.setItem('ms_refresh_token',data.refresh_token);
+  localStorage.setItem('ms_token_expiry',String(msTokenExpiry));
+}
+
+async function ensureToken(){
+  if(msToken&&Date.now()<msTokenExpiry)return msToken;
+  const data=await refreshAccessToken();
+  saveTokens(data);
+  return msToken;
+}
+
+async function graphRequest(path,options={}){
+  const token=await ensureToken();
+  const res=await fetch(GRAPH_BASE+path,{
+    ...options,
+    headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(options.headers||{})}
+  });
+  if(!res.ok){
+    const err=await res.text();
+    throw new Error(`Graph ${res.status}: ${err}`);
+  }
+  if(res.status===204)return null;
+  const ct=res.headers.get('content-type')||'';
+  if(ct.includes('application/json'))return res.json();
+  return res;
+}
+
+async function fetchMsUserEmail(){
+  try{
+    const data=await graphRequest('/me?$select=mail,userPrincipalName');
+    currentUserEmail=(data.mail||data.userPrincipalName||'').toLowerCase();
+    if(isRestricted())setStatus('Viewer mode — delete disabled');
+  }catch(e){currentUserEmail='';}
+}
+
+// ---- INIT: handle redirect with auth code ----
+async function initAuth(){
+  const url=new URL(window.location.href);
+  const code=url.searchParams.get('code');
+  if(code){
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    window.history.replaceState({},'',url.toString());
+    setStatus('Connecting to OneDrive...');
+    try{
+      const data=await exchangeCodeForToken(code);
+      saveTokens(data);
+      sessionStorage.removeItem('pkce_verifier');
+      await onConnected();
+    }catch(e){setStatus('Auth error: '+e.message);}
+    return;
+  }
+  // Try silent restore
+  const expiry=parseInt(localStorage.getItem('ms_token_expiry')||'0');
+  const rt=localStorage.getItem('ms_refresh_token');
+  if(rt){
+    try{
+      setStatus('Restoring OneDrive connection...');
+      const data=await refreshAccessToken();
+      saveTokens(data);
+      await onConnected();
+    }catch(e){
+      setStatus('Please reconnect OneDrive');
+      localStorage.removeItem('ms_refresh_token');
+    }
+  }
+}
+
+async function onConnected(){
+  msConnected=true;
+  updateDriveUI(true);
+  await fetchMsUserEmail();
+  await ensureProjectFolderAndLoad();
+}
+
+function updateDriveUI(connected){
+  const btn=document.getElementById('drive-btn');
+  const info=document.getElementById('drive-info');
+  btn.textContent=connected?'✓ OneDrive connected':'⬤ Connect OneDrive';
+  btn.className=connected?'drive-btn connected':'drive-btn';
+  info.style.display=connected?'block':'none';
+}
+
+// ---- ONEDRIVE FOLDER MANAGEMENT ----
+async function ensureFolder(parentId,name){
+  // Search for existing
+  const search=await graphRequest(`/me/drive/items/${parentId}/children?$filter=name eq '${encodeURIComponent(name)}'&$select=id,name,webUrl`);
+  const existing=(search.value||[]).find(f=>f.name===name);
+  if(existing)return existing;
+  // Create
+  const created=await graphRequest(`/me/drive/items/${parentId}/children`,{
+    method:'POST',
+    body:JSON.stringify({name,folder:{},['@microsoft.graph.conflictBehavior']:'rename'})
+  });
+  return created;
+}
+
+async function ensureProjectFolderAndLoad(){
+  setStatus('Setting up OneDrive folder...');
+  try{
+    // Root folder: Nordic_QC3
+    const root=await ensureFolder('root','Nordic_QC3');
+    rootFolderId=root.id;
+    // Project subfolder
+    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
+    document.getElementById('drive-folder-name').textContent=getProjectCfg().folder;
+    document.getElementById('drive-folder-link').innerHTML=`<a href="${projFolder.webUrl}" target="_blank">Open in OneDrive</a>`;
+    moduleFolderIds={};
+    driveFileIds={};
+    await loadAllFromDrive();
+  }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
+}
+
+async function ensureModuleFolder(modName){
+  if(moduleFolderIds[modName])return moduleFolderIds[modName];
+  const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
+  const modFolder=await ensureFolder(projFolder.id,modName);
+  moduleFolderIds[modName]=modFolder.id;
+  return modFolder.id;
+}
+
+// ---- LOAD/SAVE ----
+async function loadAllFromDrive(){
+  setStatus('Loading modules from OneDrive...');
+  for(const modName of getProjectCfg().modules){
+    await loadModuleFromDrive(modName);
+  }
+  setStatus('All modules loaded ✓');
+  if(currentModule)render();
+  renderOverview();
+}
+
+async function loadModuleFromDrive(modName){
+  try{
+    const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
+    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
+    // Search in project folder
+    const search=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${fname}'&$select=id,name`);
+    const files=search.value||[];
+    if(files.length>0){
+      driveFileIds[modName]=files[0].id;
+      const content=await graphRequest(`/me/drive/items/${files[0].id}/content`);
+      const text=await content.text();
+      const saved=JSON.parse(text);
+      if(saved&&saved.items){
+        saved.items.forEach(si=>{
+          const cur=modules[modName].items.find(i=>i.id===si.id);
+          if(cur){
+            const descMatches=!si.desc||si.desc===cur.desc;
+            if(descMatches){
+              cur.status=si.status||'pending';
+              cur.notes=si.notes||'';
+              cur.acceptedDate=si.acceptedDate||'';
+              cur.rejectedDate=si.rejectedDate||'';
+              cur.filledBy=si.filledBy||'';
+              const ids=(si.photoIds||[]).filter(Boolean);
+              cur.photoIds=ids;
+              cur.photoPreviews=ids.map(did=>({previewId:did,driveId:did,uploading:false,dataUrl:''}));
+            }
+          }
+        });
+      }
+      if(saved&&saved.meta)modules[modName].meta=saved.meta;
+      ITEMS_TEMPLATE.forEach(ti=>{
+        if(!modules[modName].items.find(i=>i.id===ti.id)){
+          modules[modName].items.push({...ti,status:'pending',notes:'',acceptedDate:'',rejectedDate:'',filledBy:'',photoIds:[],photoPreviews:[]});
+        }
+      });
+      modules[modName].items.sort((a,b)=>a.id-b.id);
+    }
+  }catch(e){console.warn('Load error for '+modName,e);}
+}
+
+async function saveToDrive(){
+  if(!msConnected){alert('Please connect OneDrive first.');return;}
+  if(!currentModule){alert('Please select a module first.');return;}
+  modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
+  modules[currentModule].meta.pm=document.getElementById('pm-input').value;
+  modules[currentModule].meta.date=document.getElementById('date-input').value;
+  setStatus('Saving...');
+  try{
+    const modName=currentModule;
+    const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
+    const payload={
+      meta:modules[modName].meta,
+      items:modules[modName].items.map(i=>({
+        id:i.id,section:i.section,desc:i.desc,status:i.status,
+        notes:i.notes,acceptedDate:i.acceptedDate,rejectedDate:i.rejectedDate,
+        filledBy:i.filledBy||'',photoIds:(i.photoIds||[]).filter(Boolean)
+      }))
+    };
+    const body=JSON.stringify(payload);
+    const modFolderId=await ensureModuleFolder(modName);
+    if(driveFileIds[modName]){
+      await graphRequest(`/me/drive/items/${driveFileIds[modName]}/content`,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body
+      });
+    } else {
+      const res=await graphRequest(`/me/drive/items/${modFolderId}:/${fname}:/content`,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body
+      });
+      driveFileIds[modName]=res.id;
+    }
+    setStatus('Saved ✓ '+new Date().toLocaleTimeString());
+    renderOverview();
+  }catch(e){setStatus('Save error: '+e.message);}
+}
+
+// ---- PHOTO UPLOAD ----
+async function uploadPhotoToDrive(dataUrl,filename){
+  if(!msConnected||!currentModule)return null;
+  try{
+    const base64=dataUrl.split(',')[1];
+    const binary=atob(base64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const modFolderId=await ensureModuleFolder(currentModule);
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${modFolderId}:/${filename}:/content`,{
+      method:'PUT',
+      headers:{Authorization:`Bearer ${await ensureToken()}`,'Content-Type':'image/jpeg'},
+      body:bytes.buffer
+    });
+    if(!res.ok)throw new Error('Upload failed: '+res.status);
+    const data=await res.json();
+    return data.id;
+  }catch(e){console.error('Photo upload error:',e);return null;}
+}
+
+async function recoverPhotos(){
+  if(!currentModule){alert('Please select a module first.');return;}
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  setStatus('Scanning OneDrive folder for photos...');
+  try{
+    const modFolderId=await ensureModuleFolder(currentModule);
+    const res=await graphRequest(`/me/drive/items/${modFolderId}/children?$select=id,name&$top=1000`);
+    const allFiles=res.value||[];
+    const imageFiles=allFiles.filter(f=>/\.(jpg|jpeg|png)$/i.test(f.name));
+    if(imageFiles.length===0){setStatus('No photos found.');return;}
+    const mod=modules[currentModule];
+    let recovered=0;
+    imageFiles.forEach(file=>{
+      const m=file.name.match(/_item(\d+)_/);
+      if(!m)return;
+      const itemId=parseInt(m[1]);
+      const item=mod.items.find(i=>i.id===itemId);
+      if(!item)return;
+      item.photoIds=item.photoIds||[];
+      item.photoPreviews=item.photoPreviews||[];
+      if(!item.photoIds.includes(file.id)){
+        item.photoIds.push(file.id);
+        item.photoPreviews.push({previewId:file.id,driveId:file.id,uploading:false,dataUrl:''});
+        recovered++;
+      }
+    });
+    render();renderOverview();
+    if(recovered>0){
+      setStatus(`Recovered ${recovered} photo link(s) ✓ — saving...`);
+      await saveToDrive();
+    } else {
+      setStatus('All photos already linked.');
+    }
+  }catch(e){setStatus('Recover error: '+e.message);}
+}
+
+// ---- SECTION COLORS ----
+function sectionColor(section){
+  const map={
+    'Water supply, HVAC':{bg:'#FFE066',fg:'#5c4a00'},
+    'Electricians':{bg:'#5B8DEF',fg:'#fff'},
+    'Electricians, foreman':{bg:'#5B8DEF',fg:'#fff'},
+    'Frame, panels':{bg:'#F4A14D',fg:'#5c3000'},
+    'Module assembly':{bg:'#F4A14D',fg:'#5c3000'},
+    'Foreman':{bg:'#E2725B',fg:'#fff'},
+    'Quality controller':{bg:'#E2725B',fg:'#fff'},
+    'Windows / doors':{bg:'#A9C9E8',fg:'#0d2c4d'},
+    'Frame interior finish':{bg:'#F4A14D',fg:'#5c3000'},
+    'Int. finishing, painting':{bg:'#EC4899',fg:'#fff'},
+    'Frame exterior finish':{bg:'#7BC67E',fg:'#0d3a12'},
+    'Black floor':{bg:'#F4A14D',fg:'#5c3000'},
+    'Suspended ceiling':{bg:'#5CC8E0',fg:'#06343d'},
+    'Tiling':{bg:'#A9C9E8',fg:'#0d2c4d'},
+    'Exterior finish':{bg:'#7BC67E',fg:'#0d3a12'},
+    'Furniture, floor finish':{bg:'#C9A6E8',fg:'#3a0d4d'},
+    'Furniture':{bg:'#C9A6E8',fg:'#3a0d4d'},
+    'Finishing, furniture':{bg:'#C9A6E8',fg:'#3a0d4d'},
+    'Bathroom finishing':{bg:'#86D9C9',fg:'#0a3a30'},
+    'Temporary roof':{bg:'#D9B38C',fg:'#3a230a'},
+    'Module packaging':{bg:'#B5B5B5',fg:'#1a1a1a'}
+  };
+  return map[section]||{bg:'#f0f0f0',fg:'#666'};
+}
+
+// ---- RENDER ----
+function render(){
+  const mod=getModState();if(!mod)return;
+  const list=document.getElementById('checklist');
+  const filtered=mod.items.filter(i=>{
+    if(filter==='pending')return i.status==='pending';
+    if(filter==='accepted')return i.status==='accepted';
+    if(filter==='rejected')return i.status==='rejected';
+    if(filter==='photos')return (i.photoIds||[]).filter(Boolean).length>0;
+    if(filter==='na')return i.status==='na';
+    return true;
+  }).sort((a,b)=>a.id-b.id);
+  let html='';
+  filtered.forEach(i=>{
+    const cls=i.status==='accepted'?'accepted':i.status==='rejected'?'rejected':i.status==='na'?'na':'';
+    const sc=sectionColor(i.section);
+    const alreadyFilled=i.status!=='pending';
+    const canChange=!isRestricted()||!alreadyFilled;
+    html+=`<div class="item ${cls}">
+      <div class="item-top">
+        <span class="item-num">#${i.id}${i.filledBy&&RESTRICTED_EMAILS.includes(i.filledBy)?'<span title="Filled by colleague" style="font-size:10px;margin-left:3px;color:#5B8DEF">👤</span>':''}</span>
+        <span class="item-sec-badge" style="background:${sc.bg};color:${sc.fg}">${i.section}</span>
+        <span class="item-desc">${i.desc}</span>
+      </div>
+      <div class="item-actions">
+        <button class="btn-accept ${i.status==='accepted'?'active':''}" onclick="setItemStatus(${i.id},'accepted')" ${canChange?'':'disabled style="opacity:0.5;cursor:not-allowed"'}>&#10003; Quality accepted</button>
+        <button class="btn-reject ${i.status==='rejected'?'active':''}" onclick="setItemStatus(${i.id},'rejected')" ${canChange?'':'disabled style="opacity:0.5;cursor:not-allowed"'}>&#10007; Rejected</button>
+        <button class="btn-na ${i.status==='na'?'active':''}" onclick="setItemStatus(${i.id},'na')" ${canChange?'':'disabled style="opacity:0.5;cursor:not-allowed"'}>N/A</button>
+        <button class="btn-photo" onclick="openPhotoUpload(${i.id})">&#128247; Photo (${(i.photoIds||[]).filter(Boolean).length+(i.photoPreviews||[]).filter(p=>p.uploading).length})</button>
+        ${i.status==='accepted'?`<input type="date" style="padding:4px 8px;border:1px solid #1D9E75;border-radius:7px;font-size:11px;color:#1D9E75;background:#f0faf5;font-family:Arial" value="${dateToISO(i.acceptedDate)}" onchange="setItemDateFromInput(${i.id},'acceptedDate',this.value)" ${canChange?'':'disabled'}/>`:''} 
+        ${i.status==='rejected'?`<input type="date" style="padding:4px 8px;border:1px solid #E24B4A;border-radius:7px;font-size:11px;color:#E24B4A;background:#fef0f0;font-family:Arial" value="${dateToISO(i.rejectedDate)}" onchange="setItemDateFromInput(${i.id},'rejectedDate',this.value)" ${canChange?'':'disabled'}/>`:''} 
+        <input class="notes-inp" type="text" placeholder="Notes..." value="${escH(i.notes)}" onchange="setNotes(${i.id},this.value)"/>
+        ${isRestricted()?'':`<button class="btn-del" onclick="delItem(${i.id})">&#128465;</button>`}
+      </div>`;
+    const previews=i.photoPreviews||[];
+    if(previews.length>0){
+      html+=`<div class="photos-row">`;
+      previews.forEach((pv,idx)=>{
+        if(pv.uploading){
+          html+=`<div class="thumb"><div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#888;background:#f5f5f5">Uploading...</div></div>`;
+        } else {
+          // OneDrive thumbnail
+          const thumbUrl=`https://graph.microsoft.com/v1.0/me/drive/items/${pv.driveId}/thumbnails/0/small/content`;
+          const fullUrl=`https://graph.microsoft.com/v1.0/me/drive/items/${pv.driveId}/content`;
+          html+=`<div class="thumb"><img src="" data-id="${pv.driveId}" onclick="openOneDrivePhoto('${pv.driveId}')" alt="Photo ${idx+1}" style="width:100%;height:100%;object-fit:cover;cursor:pointer"/>${isRestricted()?'':`<button class="del-p" onclick="delPhoto(${i.id},${idx})">&#10005;</button>`}</div>`;
+        }
+      });
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  list.innerHTML=html||'<p style="color:#aaa;padding:20px;text-align:center">No matching items</p>';
+  // Load thumbnails via Graph API with token
+  loadThumbnails();
+  const addForm=document.getElementById('add-item-form');
+  if(addForm)addForm.style.display=isRestricted()?'none':'block';
+  updateStats();
+}
+
+async function loadThumbnails(){
+  if(!msConnected)return;
+  const imgs=document.querySelectorAll('img[data-id]');
+  const token=await ensureToken().catch(()=>null);
+  if(!token)return;
+  imgs.forEach(img=>{
+    const id=img.getAttribute('data-id');
+    if(!id||img.src.startsWith('blob')||img.complete)return;
+    fetch(`${GRAPH_BASE}/me/drive/items/${id}/thumbnails/0/medium/content`,{
+      headers:{Authorization:`Bearer ${token}`}
+    }).then(r=>{
+      if(!r.ok)throw new Error('thumb '+r.status);
+      return r.blob();
+    }).then(blob=>{
+      img.src=URL.createObjectURL(blob);
+    }).catch(()=>{img.style.display='none';});
+  });
+}
+
+async function openOneDrivePhoto(driveId){
+  try{
+    const token=await ensureToken();
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    document.getElementById('lightbox-img').src=url;
+    document.getElementById('lightbox').classList.add('open');
+  }catch(e){console.error('Open photo error:',e);}
+}
+
+// ---- ITEM STATUS & DATA ----
+function setItemStatus(id,s){
+  const mod=getModState();if(!mod)return;
+  const item=mod.items.find(i=>i.id===id);if(!item)return;
+  if(isRestricted()&&item.status!=='pending')return;
+  const today=new Date().toLocaleDateString('en-GB');
+  if(item.status===s){item.status='pending';item.acceptedDate='';item.rejectedDate='';item.filledBy='';}
+  else{
+    item.status=s;
+    item.filledBy=currentUserEmail;
+    if(s==='accepted'){item.rejectedDate='';if(!item.acceptedDate)item.acceptedDate=today;}
+    else if(s==='rejected'){item.acceptedDate='';if(!item.rejectedDate)item.rejectedDate=today;}
+    else{item.acceptedDate='';item.rejectedDate='';}
+  }
+  render();renderOverview();autoSave();
+}
+function setItemDate(id,field,val){
+  const mod=getModState();if(!mod)return;
+  const item=mod.items.find(i=>i.id===id);if(!item)return;
+  if(isRestricted()&&item.status!=='pending')return;
+  item[field]=val;autoSave();
+}
+function setItemDateFromInput(id,field,isoVal){
+  if(!isoVal)return;
+  const p=isoVal.split('-');
+  setItemDate(id,field,`${p[2]}/${p[1]}/${p[0]}`);
+}
+function setNotes(id,v){const mod=getModState();if(!mod)return;const i=mod.items.find(i=>i.id===id);if(i){i.notes=v;autoSave();}}
+function delItem(id){if(!confirm('Delete this item?'))return;const mod=getModState();if(!mod)return;mod.items=mod.items.filter(i=>i.id!==id);render();autoSave();}
+function delPhoto(id,idx){
+  const mod=getModState();if(!mod)return;
+  const i=mod.items.find(i=>i.id===id);
+  if(i){if(i.photoPreviews)i.photoPreviews.splice(idx,1);i.photoIds.splice(idx,1);render();autoSave();}
+}
+function addItem(){
+  const mod=getModState();if(!mod)return;
+  const sec=document.getElementById('new-section').value.trim();
+  const desc=document.getElementById('new-desc').value.trim();
+  if(!sec||!desc){alert('Please fill in section and description.');return;}
+  const maxId=Math.max(...mod.items.map(i=>i.id),0);
+  mod.items.push({id:maxId+1,section:sec,desc,status:'pending',notes:'',acceptedDate:'',rejectedDate:'',filledBy:'',photoIds:[],photoPreviews:[]});
+  document.getElementById('new-section').value='';
+  document.getElementById('new-desc').value='';
+  render();autoSave();
+}
+
+function updateStats(){
+  const mod=getModState();if(!mod)return;
+  const ok=mod.items.filter(i=>i.status==='accepted').length;
+  const rej=mod.items.filter(i=>i.status==='rejected').length;
+  const pend=mod.items.filter(i=>i.status==='pending').length;
+  const na=mod.items.filter(i=>i.status==='na').length;
+  const photos=mod.items.reduce((s,i)=>s+(i.photoIds||[]).filter(Boolean).length,0);
+  document.getElementById('s-ok').textContent=ok;
+  document.getElementById('s-rej').textContent=rej;
+  document.getElementById('s-pend').textContent=pend;
+  document.getElementById('s-na').textContent=na;
+  document.getElementById('s-photos').textContent=photos;
+  const total=mod.items.length,done=ok+rej,pct=total?Math.round(done/total*100):0;
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-text').textContent=`${done} of ${total} checked (${pct}%) — Module ${currentModule}`;
+}
+
+function setFilter(f,btn){
+  filter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+// ---- OVERVIEW ----
+function renderOverview(){
+  const grid=document.getElementById('overview-grid');
+  let html='';
+  getProjectCfg().modules.forEach(n=>{
+    const mod=modules[n];
+    if(!mod)return;
+    const ok=mod.items.filter(i=>i.status==='accepted').length;
+    const rej=mod.items.filter(i=>i.status==='rejected').length;
+    const pend=mod.items.filter(i=>i.status==='pending').length;
+    const total=mod.items.length;
+    const pct=total?Math.round((ok+rej)/total*100):0;
+    html+=`<div class="overview-card ${n===currentModule?'active-mod':''}" onclick="switchModule('${n}')">
+      <div class="mod-name">${n}</div>
+      <div class="mod-ok">&#10003; ${ok}</div>
+      <div class="mod-rej">&#10007; ${rej}</div>
+      <div class="mod-pend">&#9679; ${pend} pending</div>
+      <div class="mod-bar"><div class="mod-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  grid.innerHTML=html;
+}
+
+// ---- PROJECT/MODULE SWITCHING ----
+function switchProject(projKey){
+  if(!PROJECTS[projKey])return;
+  currentProject=projKey;
+  currentModule=null;
+  document.getElementById('module-content').style.display='none';
+  document.getElementById('project-title').textContent=PROJECTS[projKey].label+' — QC-3';
+  const sel=document.getElementById('module-select');
+  sel.innerHTML='<option value="">— Select module —</option>';
+  PROJECTS[projKey].modules.forEach(n=>{
+    const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);
+  });
+  initProjectModules(projKey);
+  if(msConnected){
+    moduleFolderIds={};driveFileIds={};
+    ensureProjectFolderAndLoad();
+  }
+  renderOverview();
+}
+
+function initProjectModules(projKey){
+  PROJECTS[projKey].modules.forEach(n=>{
+    if(!modules[n])modules[n]={meta:{inspector:'Mārtiņš Danilevičs',pm:'Eva Litauniece',date:''},items:freshItems()};
+  });
+}
+
+function switchModule(name){
+  if(!name)return;
+  if(currentModule){
+    modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
+    modules[currentModule].meta.pm=document.getElementById('pm-input').value;
+    modules[currentModule].meta.date=document.getElementById('date-input').value;
+  }
+  currentModule=name;
+  document.getElementById('module-select').value=name;
+  document.getElementById('module-content').style.display='block';
+  const meta=modules[name].meta;
+  document.getElementById('inspector-input').value=meta.inspector||'Mārtiņš Danilevičs';
+  document.getElementById('pm-input').value=meta.pm||'Eva Litauniece';
+  document.getElementById('date-input').value=meta.date||new Date().toISOString().split('T')[0];
+  filter='all';
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.textContent.trim()==='All'));
+  render();renderOverview();
+}
+
+function getModState(){return currentModule?modules[currentModule]:null;}
+
+// ---- PHOTO HANDLING ----
+function openPhotoUpload(id){currentPhotoItemId=id;document.getElementById('photo-modal').style.display='flex';}
+function photoModalChoose(type){
+  document.getElementById('photo-modal').style.display='none';
+  if(type==='camera')document.getElementById('camera-input').click();
+  else document.getElementById('file-input').click();
+}
+function stopShooting(){currentPhotoItemId=null;document.getElementById('photo-modal').style.display='none';}
+
+function extractDateFromFilename(name){
+  const m=(name||'').match(/(\d{4})(\d{2})(\d{2})/);
+  if(m){const y=parseInt(m[1]),mo=parseInt(m[2]),d=parseInt(m[3]);
+    if(y>=2000&&y<=2099&&mo>=1&&mo<=12&&d>=1&&d<=31)return new Date(y,mo-1,d);}
+  return null;
+}
+function getExifDate(file){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const view=new DataView(e.target.result);
+      if(view.getUint16(0,false)!==0xFFD8){resolve(null);return;}
+      let offset=2;
+      while(offset<view.byteLength){
+        if(view.getUint16(offset,false)===0xFFE1){
+          const exifLength=view.getUint16(offset+2,false);
+          const exifData=new DataView(e.target.result,offset+4,exifLength-2);
+          if(String.fromCharCode(exifData.getUint8(0),exifData.getUint8(1),exifData.getUint8(2),exifData.getUint8(3))!=='Exif'){resolve(null);return;}
+          const littleEndian=exifData.getUint16(6)===0x4949;
+          const ifdOffset=exifData.getUint32(10,littleEndian)+6;
+          const entries=exifData.getUint16(ifdOffset,littleEndian);
+          for(let i=0;i<entries;i++){
+            const tag=exifData.getUint16(ifdOffset+2+i*12,littleEndian);
+            if(tag===0x9003||tag===0x0132){
+              const valOffset=exifData.getUint32(ifdOffset+2+i*12+8,littleEndian)+6;
+              let str='';
+              for(let j=0;j<19;j++)str+=String.fromCharCode(exifData.getUint8(valOffset+j));
+              const p=str.split(' ')[0].split(':');
+              if(p.length===3)resolve(`${p[2]}/${p[1]}/${p[0]}`);
+              else resolve(null);
+              return;
+            }
+          }
+          resolve(null);return;
+        }
+        offset+=2+view.getUint16(offset+2,false);
+      }
+      resolve(null);
+    };
+    reader.onerror=()=>resolve(null);
+    reader.readAsArrayBuffer(file.slice(0,65536));
+  });
+}
+
+async function handlePhotos(e){
+  const files=[...e.target.files];
+  const mod=getModState();if(!mod)return;
+  const item=mod.items.find(i=>i.id===currentPhotoItemId);if(!item)return;
+  if(!msConnected){setStatus('Connect OneDrive first.');e.target.value='';return;}
+  item.photoPreviews=item.photoPreviews||[];
+  // Detect date from first photo
+  if(!item.acceptedDate&&files.length>0){
+    let detected=null;
+    for(const f of files){const fnDate=extractDateFromFilename(f.name);if(fnDate){detected=fnDate.toLocaleDateString('en-GB');break;}}
+    if(!detected){for(const f of files){const exifStr=await getExifDate(f);if(exifStr){detected=exifStr;break;}}}
+    if(!detected&&files[0].lastModified)detected=new Date(files[0].lastModified).toLocaleDateString('en-GB');
+    if(detected)item.acceptedDate=detected;
+  }
+  const newPreviews=[];
+  for(const f of files){
+    let dataUrl;try{dataUrl=await readFile(f);}catch(err){continue;}
+    const previewId='p_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+    item.photoIds.push(null);
+    item.photoPreviews.push({previewId,dataUrl,uploading:true,driveId:null});
+    newPreviews.push({previewId,dataUrl,item});
+  }
+  render();
+  setStatus(`${newPreviews.length} photo(s) added — uploading...`);
+  e.target.value='';
+  for(const {previewId,dataUrl,item} of newPreviews){
+    const pv=item.photoPreviews.find(p=>p.previewId===previewId);if(!pv)continue;
+    let driveId=null,retries=3;
+    while(retries>0&&!driveId){
+      try{
+        const fname=`${currentModule.replace(/ /g,'_')}_item${item.id}_${Date.now()}.jpg`;
+        driveId=await uploadPhotoToDrive(dataUrl,fname);
+      }catch(err){retries--;if(retries>0)await new Promise(r=>setTimeout(r,1500));}
+    }
+    if(driveId){
+      pv.uploading=false;pv.driveId=driveId;pv.dataUrl='';
+      const ixId=item.photoIds.findIndex((_,i)=>item.photoPreviews[i]&&item.photoPreviews[i].previewId===previewId);
+      if(ixId>=0)item.photoIds[ixId]=driveId;
+      render();
+    } else {
+      item.photoPreviews=item.photoPreviews.filter(p=>p.previewId!==previewId);
+      render();
+    }
+  }
+  setStatus('Upload complete ✓');
+  autoSave();
+}
+
+function readFile(f){return new Promise(res=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.readAsDataURL(f);});}
+
+// ---- CAMERA ----
+let camStream=null,camPhotos=[],camItemId=null,camUploadQueue=[];
+
+function shootPhoto(){
+  const video=document.getElementById('cam-video');
+  const canvas=document.getElementById('cam-canvas');
+  const maxW=1600;const srcW=video.videoWidth||1280,srcH=video.videoHeight||720;
+  const scale=srcW>maxW?maxW/srcW:1;
+  canvas.width=Math.round(srcW*scale);canvas.height=Math.round(srcH*scale);
+  const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const dataUrl=canvas.toDataURL('image/jpeg',0.8);
+  camPhotos.push(dataUrl);
+  const prev=document.getElementById('cam-previews');
+  if(camPhotos.length===1)prev.innerHTML='';
+  const img=document.createElement('img');img.src=dataUrl;img.className='cam-thumb';prev.appendChild(img);
+  document.getElementById('cam-count').textContent=camPhotos.length+' photo'+(camPhotos.length>1?'s':'');
+  const btn=document.getElementById('cam-shoot-btn');btn.style.background='#1D9E75';setTimeout(()=>btn.style.background='#fff',150);
+  uploadCamPhotoNow(dataUrl,camPhotos.length-1);
+}
+
+function getCamItem(){
+  const mod=getModState();if(!mod)return null;
+  const item=mod.items.find(i=>i.id===camItemId);
+  if(item)item.__mod=currentModule;return item;
+}
+
+async function uploadCamPhotoNow(dataUrl,idx){
+  const item=getCamItem();if(!item)return;
+  item.photoPreviews=item.photoPreviews||[];
+  const previewId='p_'+Date.now()+'_'+idx;
+  item.photoIds.push(null);
+  item.photoPreviews.push({previewId,dataUrl,uploading:true,driveId:null});
+  camUploadQueue.push(previewId);
+  const today=new Date().toLocaleDateString('en-GB');
+  if(!item.acceptedDate)item.acceptedDate=today;
+  if(currentModule===item.__mod)render();
+  if(!msConnected)return;
+  let driveId=null,retries=3;
+  while(retries>0&&!driveId){
+    try{
+      const fname=`${currentModule.replace(/ /g,'_')}_item${item.id}_${Date.now()}.jpg`;
+      driveId=await uploadPhotoToDrive(dataUrl,fname);
+    }catch(err){retries--;if(retries>0)await new Promise(r=>setTimeout(r,1500));}
+  }
+  if(driveId){
+    const pv=item.photoPreviews.find(p=>p.previewId===previewId);
+    if(pv){pv.uploading=false;pv.driveId=driveId;pv.dataUrl='';}
+    const ix=item.photoIds.findIndex((_,i)=>item.photoPreviews[i]&&item.photoPreviews[i].previewId===previewId);
+    if(ix>=0)item.photoIds[ix]=driveId;
+  } else {
+    item.photoPreviews=item.photoPreviews.filter(p=>p.previewId!==previewId);
+    item.photoIds.pop();
+  }
+  camUploadQueue=camUploadQueue.filter(p=>p!==previewId);
+  render();autoSave();
+}
+
+async function openInAppCamera(itemId){
+  camItemId=itemId;camPhotos=[];camUploadQueue=[];
+  document.getElementById('cam-previews').innerHTML='<span style="color:#777;font-size:12px">No photos yet</span>';
+  document.getElementById('cam-count').textContent='0 photos';
+  document.getElementById('cam-item-label').textContent=itemId;
+  document.getElementById('cam-modal').classList.add('open');
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false});
+    document.getElementById('cam-video').srcObject=camStream;
+  }catch(err){alert('Camera not available: '+err.message);closeCamera();}
+}
+
+async function doneShooting(){
+  const count=camPhotos.length;closeCamera();if(count===0)return;
+  setStatus('Finishing upload...');
+  let waited=0;
+  while(camUploadQueue.length>0&&waited<30000){await new Promise(r=>setTimeout(r,300));waited+=300;}
+  setStatus(`Done: ${count} photo(s) uploaded ✓`);camPhotos=[];
+}
+
+function closeCamera(){
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+  document.getElementById('cam-modal').classList.remove('open');
+  document.getElementById('cam-video').srcObject=null;
+}
+
+// ---- HELPERS ----
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+function dateToISO(d){
+  if(!d)return '';const p=d.split('/');
+  if(p.length===3)return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  return '';
+}
+function setStatus(msg){document.getElementById('save-status').textContent=msg;}
+function closeLightbox(e){if(e.target===document.getElementById('lightbox'))document.getElementById('lightbox').classList.remove('open');}
+
+let autoSaveTimer=null;
+function autoSave(){
+  if(currentModule){
+    modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
+    modules[currentModule].meta.pm=document.getElementById('pm-input').value;
+    modules[currentModule].meta.date=document.getElementById('date-input').value;
+  }
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{if(msConnected)saveToDrive();},3000);
+}
+
+// ---- EXPORT PROTOCOL ----
+function exportProtocol(){
+  if(!currentModule){alert('Please select a module first.');return;}
+  const mod=getModState();
+  const inspector=document.getElementById('inspector-input').value||'—';
+  const pm=document.getElementById('pm-input').value||'—';
+  const dateVal=document.getElementById('date-input').value;
+  const date=dateVal?new Date(dateVal).toLocaleDateString('en-GB'):new Date().toLocaleDateString('en-GB');
+  const ok=mod.items.filter(i=>i.status==='accepted').length;
+  const rej=mod.items.filter(i=>i.status==='rejected').length;
+  const pend=mod.items.filter(i=>i.status==='pending').length;
+  const na=mod.items.filter(i=>i.status==='na').length;
+  const overall=rej===0&&(pend-na)<=0?'ACCEPTED':rej>0?'NOT ACCEPTED':'IN PROGRESS';
+  const oColor=overall==='ACCEPTED'?'#1D9E75':overall==='NOT ACCEPTED'?'#E24B4A':'#EF9F27';
+  let rows='';
+  mod.items.forEach(i=>{
+    const sLbl=i.status==='accepted'?'Quality accepted':i.status==='rejected'?'Rejected':i.status==='na'?'N/A':'—';
+    const sColor=i.status==='accepted'?'#1D9E75':i.status==='rejected'?'#E24B4A':i.status==='na'?'#888':'#ccc';
+    const rejCell=i.status==='rejected'?(i.rejectedDate||''):'';
+    const accCell=i.status==='accepted'?(i.acceptedDate||''):'';
+    const rowBg=i.status==='na'?'background:#f9f9f9;':i.status==='accepted'?'background:#f0fff8;':'';
+    rows+=`<tr style="${rowBg}">
+      <td style="padding:2px 6px;border:0.5px solid #ccc;text-align:center;font-size:10px;line-height:1.25">${i.id}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25;color:#555">${i.section}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25">${i.desc}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25;text-align:center;color:#E24B4A">${rejCell||'—'}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25;text-align:center;color:#1D9E75;font-weight:${accCell?'700':'400'}">${accCell||'—'}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25;color:${sColor};text-align:center;font-weight:700">${sLbl}</td>
+      <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25">${i.notes||''}</td>
+    </tr>`;
+  });
+  const projLabel=getProjectCfg().label;
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>QC-3 — ${currentModule}</title>
+<style>body{font-family:Arial,sans-serif;max-width:980px;margin:0 auto;padding:28px;color:#333}table{border-collapse:collapse;width:100%}th{background:#f0f0f0;font-size:10px;font-weight:700;padding:4px 6px;line-height:1.25;border:0.5px solid #ccc}td,th{vertical-align:top}tr{page-break-inside:avoid}@media print{body{padding:10px}@page{margin:15mm 12mm}}</style>
+</head><body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:12px;border-bottom:2px solid #333">
+<div><div style="font-size:11px;color:#888;margin-bottom:4px">Project: ${projLabel} &nbsp;|&nbsp; Address: Iceland</div>
+<h1 style="font-size:18px;font-weight:700;margin-bottom:6px">MODULE CHECKLIST &nbsp; No. QC-3 &nbsp;|&nbsp; Module: ${currentModule}</h1>
+<p style="font-size:12px">Date: <strong>${date}</strong></p></div>
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
+<div style="font-size:20px;font-weight:700;color:${oColor};border:2px solid ${oColor};padding:6px 18px;border-radius:4px">${overall}</div>
+</div></div>
+<table style="margin-bottom:24px"><thead><tr>
+<th style="width:24px">No.</th><th style="width:120px">Section</th><th>Works to be tested</th>
+<th style="width:72px">Quality rejected, date</th><th style="width:72px">Quality accepted, date</th>
+<th style="width:80px">Status</th><th style="width:90px">Notes</th>
+</tr></thead><tbody>${rows}</tbody></table>
+<div style="background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:13px 17px;margin-bottom:26px">
+<p style="font-weight:700;font-size:13px;margin-bottom:8px">Meets quality requirements!</p>
+<p style="font-size:12px;margin-bottom:2px">Quality controller: <strong>${inspector}</strong></p>
+<p style="font-size:11px;color:#777">name, surname, signature / stamp</p></div>
+<div style="border:1px solid #ccc;border-radius:4px;padding:13px 17px;margin-bottom:26px">
+<p style="font-weight:700;font-size:13px;margin-bottom:10px">MODULE ACCEPTANCE: name, surname, signature / stamp</p>
+<p style="font-size:12px;margin-bottom:4px">1. Project manager: <strong>${pm}</strong></p>
+<p style="font-size:12px;margin-bottom:14px">2. Quality controller: <strong>${inspector}</strong></p>
+<div style="display:flex;gap:14px;align-items:center">
+<span style="font-weight:700;font-size:12px">CHECK BY THE PROJECT MANAGER:</span>
+<span style="border:1px solid #333;padding:4px 14px;font-size:12px;font-weight:700;color:${overall==='ACCEPTED'?'#1D9E75':'#333'}">${overall==='ACCEPTED'?'☑':'☐'} ACCEPTED</span>
+<span style="border:1px solid #333;padding:4px 14px;font-size:12px;font-weight:700;color:${overall==='NOT ACCEPTED'?'#E24B4A':'#333'}">${overall==='NOT ACCEPTED'?'☑':'☐'} NOT ACCEPTED</span>
+</div>
+<div style="margin-top:18px;border-top:1px solid #999;padding-top:6px;width:200px;font-size:11px;color:#777">Signature:</div></div>
+</body></html>`;
+  const blob=new Blob([html],{type:'text/html'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`QC3_${currentModule.replace(/ /g,'_')}_${date.replace(/\//g,'-')}.html`;
+  a.click();URL.revokeObjectURL(url);
+}
+
+// ---- INIT ----
+function initDropdown(){
+  const sel=document.getElementById('module-select');
+  getProjectCfg().modules.forEach(n=>{
+    const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);
+  });
+  Object.entries(PROJECTS).forEach(([pk,proj])=>{
+    proj.modules.forEach(n=>{
+      if(!modules[n])modules[n]={meta:{inspector:'Mārtiņš Danilevičs',pm:'Eva Litauniece',date:''},items:freshItems()};
+    });
+  });
+}
+
+initDropdown();
+renderOverview();
+initAuth();
+</script>
+</body>
+</html>
