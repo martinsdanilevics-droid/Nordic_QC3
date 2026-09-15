@@ -731,12 +731,12 @@ function render(){
 
 async function loadThumbnails(){
   if(!msConnected)return;
-  const imgs=document.querySelectorAll('img[data-id]');
   const token=await ensureToken().catch(()=>null);
   if(!token)return;
+  const imgs=document.querySelectorAll('img[data-id]');
   imgs.forEach(img=>{
     const id=img.getAttribute('data-id');
-    if(!id||img.src.startsWith('blob')||img.complete)return;
+    if(!id||img.src.startsWith('blob:'))return;
     fetch(`${GRAPH_BASE}/me/drive/items/${id}/thumbnails/0/medium/content`,{
       headers:{Authorization:`Bearer ${token}`}
     }).then(r=>{
@@ -744,7 +744,10 @@ async function loadThumbnails(){
       return r.blob();
     }).then(blob=>{
       img.src=URL.createObjectURL(blob);
-    }).catch(()=>{img.style.display='none';});
+    }).catch(e=>{
+      console.warn('Thumbnail error for',id,e.message);
+      img.style.background='#f0f0f0';
+    });
   });
 }
 
