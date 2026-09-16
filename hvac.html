@@ -635,6 +635,9 @@ function renderTestForm(){
   else if(tt.type==='water'){html+=renderWaterForm(d);}
 
   document.getElementById('test-form-content').innerHTML=html;
+  // Set datalist fields via JS (value attr doesn't work reliably for datalist)
+  const sysnoEl=document.getElementById('f-sysno');
+  if(sysnoEl)sysnoEl.value=currentTestCtx.data?.system_no||'';
   // Auto-set today's start time if new test and no data yet
   if(!data){
     const now=new Date();
@@ -657,9 +660,9 @@ function renderHeatingForm(d,testType){
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>System</label>
-        <input type="text" value="${currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System'}" readonly style="background:#f0f0f0"/></div>
+        <input type="text" id="f-system" value="${d.system||currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System'}"/></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
         <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
     </div>
@@ -718,7 +721,7 @@ function renderSewerForm(d){
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
         <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
@@ -764,7 +767,7 @@ function renderWaterForm(d){
           <option value="Full System with Water Mixers"/>
         </datalist></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
         <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
@@ -1079,6 +1082,7 @@ function collectFormData(){
     const p2e=parseFloat(document.getElementById('f-p2-pe').value);
     const d1=isNaN(p1s)||isNaN(p1e)?null:+(p1e-p1s).toFixed(2);
     const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
+    base.system=document.getElementById('f-system')?.value||'';
     base.system_no=document.getElementById('f-sysno')?.value||'';
     base.visual_inspection=document.getElementById('f-vi')?.checked||false;
     base.part_i={start_time:document.getElementById('f-p1-ts').value,end_time:document.getElementById('f-p1-te').value,pressure_start:p1s,pressure_end:p1e,difference:d1,start_photo_id:existing.part_i?.start_photo_id||null,end_photo_id:existing.part_i?.end_photo_id||null};
