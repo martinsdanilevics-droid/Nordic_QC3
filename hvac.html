@@ -253,18 +253,53 @@ async function handleConnect(){
   }
   if(rt){
     try{await refreshToken();msConnected=true;updateConnectBtn();await setupFoldersAndLoad();return;}
-    catch(e){}
+    catch(e){localStorage.removeItem('hvac_ms_refresh_token');}
   }
-  // Full login
+  // Popup login
+  await loginWithPopup();
+}
+
+async function loginWithPopup(){
+  const state=Math.random().toString(36).slice(2);
   const params=new URLSearchParams({
     client_id:MS_CLIENT_ID,
-    response_type:'code',
-    response_mode:'fragment',
+    response_type:'token',
     redirect_uri:MS_REDIRECT_URI,
-    scope:MS_SCOPES.join(' ')+' offline_access',
+    scope:MS_SCOPES.join(' '),
+    response_mode:'fragment',
+    state,
+    nonce:Math.random().toString(36).slice(2),
     prompt:'select_account'
   });
-  window.location.href=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
+  const authUrl=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
+  const popup=window.open(authUrl,'ms_login','width=520,height=620,left=200,top=100');
+  if(!popup){setStatus('Popup blocked! Allow popups for this site.');return;}
+  // Poll for redirect
+  await new Promise((resolve,reject)=>{
+    const timer=setInterval(()=>{
+      try{
+        if(popup.closed){clearInterval(timer);reject(new Error('Login cancelled'));return;}
+        const hash=popup.location.hash;
+        if(hash&&hash.includes('access_token')){
+          clearInterval(timer);
+          popup.close();
+          const p=new URLSearchParams(hash.slice(1));
+          const token=p.get('access_token');
+          const expiresIn=parseInt(p.get('expires_in')||'3600');
+          msToken=token;
+          msTokenExpiry=Date.now()+expiresIn*1000;
+          localStorage.setItem('hvac_ms_token',token);
+          localStorage.setItem('hvac_ms_token_expiry',String(msTokenExpiry));
+          resolve();
+        }
+      }catch(e){/* cross-origin, still loading */}
+    },300);
+    setTimeout(()=>{clearInterval(timer);popup.close();reject(new Error('Login timeout'));},120000);
+  });
+  msConnected=true;
+  updateConnectBtn();
+  setStatus('Connected! Loading data...');
+  await setupFoldersAndLoad();
 }
 
 async function exchangeCode(code){
@@ -334,32 +369,17 @@ function updateConnectBtn(){
 
 // ========== INIT (handle OAuth redirect) ==========
 (async()=>{
-  const params=new URLSearchParams(window.location.hash.slice(1)||window.location.search);
-  const code=params.get('code');
-  if(code){
-    history.replaceState({},'',window.location.pathname);
-    setStatus('Connecting to OneDrive...');
-    try{
-      await exchangeCode(code);
-      msConnected=true;
-      updateConnectBtn();
-      await setupFoldersAndLoad();
-    }catch(e){setStatus('Auth error: '+e.message);}
+  // Try silent restore from stored token
+  const token=localStorage.getItem('hvac_ms_token');
+  const expiry=parseInt(localStorage.getItem('hvac_ms_token_expiry')||'0');
+  if(token&&Date.now()<expiry-30000){
+    msToken=token;
+    msTokenExpiry=expiry;
+    msConnected=true;
+    updateConnectBtn();
+    setStatus('Restoring session...');
+    await setupFoldersAndLoad();
     return;
-  }
-  // Try silent restore
-  const rt=localStorage.getItem('hvac_ms_refresh_token');
-  if(rt){
-    try{
-      await refreshToken();
-      msConnected=true;
-      updateConnectBtn();
-      setStatus('Restoring session...');
-      await setupFoldersAndLoad();
-    }catch(e){
-      localStorage.removeItem('hvac_ms_refresh_token');
-      setStatus('Please connect OneDrive.');
-    }
   }
   renderMatrix();
 })();
