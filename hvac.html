@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Nordic Homes — HVAC Tests</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;min-height:100vh;color:#1a1a2e;}
+
+/* TOP BAR */
+.topbar{background:linear-gradient(135deg,#1a3a2a 0%,#2d5a3d 100%);color:#fff;padding:0;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.3);}
+.topbar-inner{display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap;}
+.topbar-title{font-size:15px;font-weight:700;letter-spacing:0.5px;}
+.topbar-sub{font-size:11px;opacity:0.7;}
+.topbar-controls{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;}
+select.top-sel{padding:6px 10px;border-radius:7px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.12);color:#fff;font-size:13px;cursor:pointer;}
+select.top-sel option{background:#1a3a2a;color:#fff;}
+.btn-connect{padding:6px 14px;border-radius:7px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;cursor:pointer;font-weight:600;}
+.btn-connect:hover{background:rgba(255,255,255,0.2);}
+.btn-connect.connected{background:rgba(80,200,120,0.25);border-color:rgba(80,200,120,0.5);}
+
+/* STATUS BAR */
+.statusbar{background:#1a3a2a;color:rgba(255,255,255,0.75);font-size:11px;padding:4px 16px;min-height:22px;}
+
+/* NAV TABS */
+.nav-tabs{display:flex;background:#fff;border-bottom:2px solid #e0e0e0;padding:0 16px;}
+.nav-tab{padding:12px 20px;font-size:13px;font-weight:600;color:#666;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.2s;}
+.nav-tab.active{color:#2d5a3d;border-bottom-color:#2d5a3d;}
+.nav-tab:hover{color:#2d5a3d;}
+
+/* MAIN CONTENT */
+.main{padding:16px;max-width:1200px;margin:0 auto;}
+
+/* OVERVIEW MATRIX */
+.matrix-wrap{overflow-x:auto;}
+.matrix-table{border-collapse:collapse;min-width:700px;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
+.matrix-table th{background:#2d5a3d;color:#fff;padding:10px 12px;font-size:12px;text-align:center;white-space:nowrap;}
+.matrix-table th.mod-col{text-align:left;min-width:90px;}
+.matrix-table td{padding:8px 10px;font-size:12px;text-align:center;border-bottom:1px solid #f0f0f0;border-right:1px solid #f0f0f0;}
+.matrix-table td.mod-name{text-align:left;font-weight:600;color:#1a3a2a;background:#f8fdf9;}
+.matrix-table tr:hover td{background:#f0f8f2;}
+.matrix-table tr:hover td.mod-name{background:#e8f5ec;}
+.cell-done{color:#2d5a3d;font-weight:600;cursor:pointer;}
+.cell-done:hover{text-decoration:underline;}
+.cell-empty{color:#bbb;}
+.cell-na{color:#bbb;font-style:italic;}
+.cell-btn{background:none;border:1px solid #2d5a3d;color:#2d5a3d;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;}
+.cell-btn:hover{background:#2d5a3d;color:#fff;}
+
+/* GROUP HEADER ROW */
+.matrix-table tr.group-row td{background:#e8f5ec;font-weight:700;font-size:12px;color:#1a3a2a;padding:6px 12px;letter-spacing:0.3px;}
+
+/* TEST FORM */
+.form-card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);padding:20px;margin-bottom:16px;}
+.form-card h3{font-size:14px;font-weight:700;color:#2d5a3d;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid #e8f5ec;display:flex;align-items:center;gap:8px;}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.form-grid.cols3{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group.full{grid-column:1/-1;}
+.form-group label{font-size:11px;font-weight:600;color:#555;text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:13px;font-family:inherit;background:#fafafa;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#2d5a3d;background:#fff;}
+.form-group textarea{resize:vertical;min-height:60px;}
+
+/* MEASUREMENT SECTION */
+.meas-table{width:100%;border-collapse:collapse;margin-top:8px;}
+.meas-table th{background:#f0f8f2;color:#2d5a3d;font-size:11px;padding:7px 10px;text-align:center;border:1px solid #ddd;}
+.meas-table th:first-child{text-align:left;}
+.meas-table td{padding:6px 8px;border:1px solid #eee;text-align:center;}
+.meas-table td:first-child{font-weight:600;font-size:12px;background:#fafafa;}
+.meas-table input{width:100%;border:none;background:transparent;font-size:13px;text-align:center;padding:2px;}
+.meas-table input:focus{outline:1px solid #2d5a3d;border-radius:4px;}
+.diff-cell{font-weight:700;color:#2d5a3d;}
+.diff-cell.fail{color:#c0392b;}
+
+/* PHOTO SECTION */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px;}
+.photo-slot{border:2px dashed #ccc;border-radius:8px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#fafafa;transition:border-color 0.2s;}
+.photo-slot:hover{border-color:#2d5a3d;background:#f0f8f2;}
+.photo-slot img{width:100%;height:100%;object-fit:cover;border-radius:6px;}
+.photo-slot .photo-label{font-size:10px;color:#888;text-align:center;padding:4px;font-weight:600;}
+.photo-slot .photo-label-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:4px 6px;text-align:center;}
+.photo-slot .remove-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:13px;display:none;align-items:center;justify-content:center;}
+.photo-slot:hover .remove-btn{display:flex;}
+.uploading-overlay{position:absolute;inset:0;background:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:12px;color:#2d5a3d;}
+
+/* RESULT BAR */
+.result-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-radius:10px;margin-top:8px;}
+.result-bar.passed{background:#e8f5e9;border:2px solid #4caf50;}
+.result-bar.failed{background:#ffebee;border:2px solid #f44336;}
+.result-bar.pending{background:#f5f5f5;border:2px solid #ccc;}
+.result-label{font-size:22px;font-weight:800;letter-spacing:1px;}
+.result-bar.passed .result-label{color:#2e7d32;}
+.result-bar.failed .result-label{color:#c62828;}
+.result-bar.pending .result-label{color:#999;}
+
+/* ACTION BUTTONS */
+.action-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+.btn-primary{padding:10px 22px;background:#2d5a3d;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-primary:hover{background:#1a3a2a;}
+.btn-secondary{padding:10px 22px;background:#fff;color:#2d5a3d;border:2px solid #2d5a3d;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-secondary:hover{background:#f0f8f2;}
+.btn-danger{padding:10px 22px;background:#fff;color:#c62828;border:2px solid #c62828;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+
+/* VISUAL INSP */
+.vi-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fdf9;border-radius:8px;border:1px solid #ddd;}
+.vi-row input[type=checkbox]{width:18px;height:18px;accent-color:#2d5a3d;cursor:pointer;}
+.vi-row label{font-size:13px;cursor:pointer;}
+
+/* SECTION SUBTITLE */
+.section-sub{font-size:11px;color:#888;font-style:italic;margin-bottom:8px;}
+
+/* PIPE ROW LABEL */
+.pipe-label{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;margin:10px 0 4px;}
+.pipe-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+
+/* BACK LINK */
+.back-btn{display:inline-flex;align-items:center;gap:6px;color:#2d5a3d;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;background:none;border:none;padding:0;}
+.back-btn:hover{text-decoration:underline;}
+
+/* RESPONSIVE */
+@media(max-width:600px){
+  .form-grid{grid-template-columns:1fr;}
+  .form-grid.cols3{grid-template-columns:1fr 1fr;}
+  .topbar-controls{width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="topbar-title">🏠 Nordic Homes</div>
+      <div class="topbar-sub">HVAC Pressure Tests</div>
+    </div>
+    <div class="topbar-controls">
+      <select class="top-sel" id="project-sel" onchange="onProjectChange()">
+        <option value="ISL_Holaborg">ISL Holaborg</option>
+        <option value="ISL_Jorfi">ISL Jorfi</option>
+        <option value="ISL_Mariuborg">ISL Mariuborg</option>
+        <option value="GER_CS">GER CS Chimney Street</option>
+      </select>
+      <button class="btn-connect" id="connect-btn" onclick="handleConnect()">⬤ Connect OneDrive</button>
+    </div>
+  </div>
+</div>
+<div class="statusbar" id="statusbar">Not connected to OneDrive.</div>
+
+<div class="nav-tabs">
+  <div class="nav-tab active" id="tab-overview" onclick="showTab('overview')">📊 Overview</div>
+  <div class="nav-tab" id="tab-test" onclick="showTab('test')" style="display:none" id="tab-test">📋 Test Form</div>
+</div>
+
+<div class="main">
+
+  <!-- OVERVIEW TAB -->
+  <div id="view-overview">
+    <div class="matrix-wrap" id="matrix-wrap">
+      <p style="color:#999;font-size:13px;padding:20px 0;">Connect OneDrive to load test data.</p>
+    </div>
+  </div>
+
+  <!-- TEST FORM TAB -->
+  <div id="view-test" style="display:none">
+    <button class="back-btn" onclick="showTab('overview')">← Back to Overview</button>
+    <div id="test-form-content"></div>
+  </div>
+
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(event)"/>
+<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoInput(event)"/>
+
+<script>
+// ========== CONFIG ==========
+const MS_CLIENT_ID='18090634-b157-4e0c-837d-590122ea9eca';
+const MS_TENANT_ID='aac98fec-0701-4329-ad5d-8b1d279eeb6c';
+const MS_SCOPES=['Files.ReadWrite','User.Read'];
+const MS_REDIRECT_URI=window.location.origin+window.location.pathname;
+const GRAPH_BASE='https://graph.microsoft.com/v1.0';
+
+const PROJECTS={
+  ISL_Holaborg:{label:'ISL Holaborg',folder:'ISL_Holaborg_QC',modules:['HLB 1-1','HLB 1-2','HLB 2','HLB 3-1','HLB 3-2','HLB 4','HLB 5-1','HLB 5-2']},
+  ISL_Jorfi:{label:'ISL Jorfi',folder:'ISL_Jorfi_QC',modules:['JF 1-1','JF 1-2','JF 2','JF 3-1','JF 3-2']},
+  ISL_Mariuborg:{label:'ISL Mariuborg',folder:'ISL_Mariuborg_QC',modules:['MB 1-1','MB 1-2','MB 2','MB 3-1','MB 3-2']},
+  GER_CS:{label:'GER CS Chimney Street',folder:'GER_CS_QC',modules:['CS 2-1','CS 2-2','CS 2-3','CS 2-4','CS 2-5','CS 2-6','CS 2-7','CS 2-8']}
+};
+
+const TEST_TYPES={
+  'QC-4.0':{label:'QC-4.0 Heating Pneumatic',folder:'QC-4.0 Heating Pneumatic',type:'heating'},
+  'QC-4.1':{label:'QC-4.1 Radiator Heating Pneumatic',folder:'QC-4.1 Radiator Heating Pneumatic',type:'heating'},
+  'QC-4.2':{label:'QC-4.2 Sewer Hydraulic',folder:'QC-4.2 Sewer Hydraulic',type:'sewer'},
+  'QC-5.0':{label:'QC-5.0 Water Supply Pneumatic',folder:'QC-5.0 Water Supply Pneumatic',type:'water'}
+};
+
+const PERFORMERS=['Mārtiņš Danilevičs','Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
+const QC_REP='Mārtiņš Danilevičs';
+
+const HEATING_SCOPES=['Underfloor Heating System','Radiator Heating System'];
+const WATER_SCOPES=['Full System with water mixers','Collector Piping','Concealed Wall Piping'];
+
+// ========== STATE ==========
+let msToken=null;
+let msTokenExpiry=0;
+let msConnected=false;
+let rootFolderId=null;
+let currentProject='ISL_Holaborg';
+let folderCache={};  // key: path string → id
+// testsData[project][module][testKey] = {date, result, fileId, data}
+let testsData={};
+let currentTestCtx=null; // {module, testType, scope, data}
+let currentPhotoSlot=null;
+
+// ========== HELPERS ==========
+function setStatus(msg){document.getElementById('statusbar').textContent=msg;}
+function proj(){return PROJECTS[currentProject];}
+function today(){return new Date().toLocaleDateString('de-DE');}
+function todayISO(){return new Date().toISOString().slice(0,10);}
+
+// ========== TABS ==========
+function showTab(tab){
+  document.getElementById('view-overview').style.display=tab==='overview'?'':'none';
+  document.getElementById('view-test').style.display=tab==='test'?'':'none';
+  document.getElementById('tab-overview').classList.toggle('active',tab==='overview');
+  document.getElementById('tab-test').classList.toggle('active',tab==='test');
+  document.getElementById('tab-test').style.display=tab==='test'?'':'none';
+  if(tab==='overview')renderMatrix();
+}
+
+// ========== PROJECT CHANGE ==========
+function onProjectChange(){
+  currentProject=document.getElementById('project-sel').value;
+  showTab('overview');
+  if(msConnected)loadProjectTests();
+}
+
+// ========== AUTH ==========
+async function handleConnect(){
+  if(msConnected){setStatus('Already connected.');return;}
+  const rt=localStorage.getItem('hvac_ms_refresh_token');
+  const expiry=parseInt(localStorage.getItem('hvac_ms_token_expiry')||'0');
+  if(rt&&Date.now()<expiry-30000){
+    msToken=localStorage.getItem('hvac_ms_token');
+    msTokenExpiry=expiry;
+    msConnected=true;
+    updateConnectBtn();
+    setStatus('Restoring OneDrive connection...');
+    await setupFoldersAndLoad();
+    return;
+  }
+  if(rt){
+    try{await refreshToken();msConnected=true;updateConnectBtn();await setupFoldersAndLoad();return;}
+    catch(e){}
+  }
+  // Full login
+  const params=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    response_type:'code',
+    redirect_uri:MS_REDIRECT_URI,
+    scope:MS_SCOPES.join(' ')+' offline_access',
+    prompt:'select_account'
+  });
+  window.location.href=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
+}
+
+async function exchangeCode(code){
+  const body=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    grant_type:'authorization_code',
+    code,
+    redirect_uri:MS_REDIRECT_URI,
+    scope:MS_SCOPES.join(' ')+' offline_access'
+  });
+  const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const data=await res.json();
+  if(data.error)throw new Error(data.error_description||data.error);
+  storeTokens(data);
+}
+
+async function refreshToken(){
+  const rt=localStorage.getItem('hvac_ms_refresh_token');
+  if(!rt)throw new Error('No refresh token');
+  const body=new URLSearchParams({
+    client_id:MS_CLIENT_ID,
+    grant_type:'refresh_token',
+    refresh_token:rt,
+    scope:MS_SCOPES.join(' ')+' offline_access'
+  });
+  const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  const data=await res.json();
+  if(data.error)throw new Error(data.error_description||data.error);
+  storeTokens(data);
+}
+
+function storeTokens(data){
+  msToken=data.access_token;
+  msTokenExpiry=Date.now()+(data.expires_in||3600)*1000;
+  localStorage.setItem('hvac_ms_token',msToken);
+  localStorage.setItem('hvac_ms_token_expiry',String(msTokenExpiry));
+  if(data.refresh_token)localStorage.setItem('hvac_ms_refresh_token',data.refresh_token);
+}
+
+async function ensureToken(){
+  if(msToken&&Date.now()<msTokenExpiry-30000)return msToken;
+  await refreshToken();
+  return msToken;
+}
+
+async function graphRequest(path,options={}){
+  const token=await ensureToken();
+  const res=await fetch(GRAPH_BASE+path,{
+    ...options,
+    headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(options.headers||{})}
+  });
+  if(!res.ok){
+    const err=await res.text();
+    throw new Error(`Graph ${res.status}: ${err}`);
+  }
+  if(res.status===204)return{};
+  const ct=res.headers.get('content-type')||'';
+  if(ct.includes('json'))return res.json();
+  return res;
+}
+
+function updateConnectBtn(){
+  const btn=document.getElementById('connect-btn');
+  btn.textContent=msConnected?'✓ OneDrive connected':'⬤ Connect OneDrive';
+  btn.classList.toggle('connected',msConnected);
+}
+
+// ========== INIT (handle OAuth redirect) ==========
+(async()=>{
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get('code');
+  if(code){
+    history.replaceState({},'',window.location.pathname);
+    setStatus('Connecting to OneDrive...');
+    try{
+      await exchangeCode(code);
+      msConnected=true;
+      updateConnectBtn();
+      await setupFoldersAndLoad();
+    }catch(e){setStatus('Auth error: '+e.message);}
+    return;
+  }
+  // Try silent restore
+  const rt=localStorage.getItem('hvac_ms_refresh_token');
+  if(rt){
+    try{
+      await refreshToken();
+      msConnected=true;
+      updateConnectBtn();
+      setStatus('Restoring session...');
+      await setupFoldersAndLoad();
+    }catch(e){
+      localStorage.removeItem('hvac_ms_refresh_token');
+      setStatus('Please connect OneDrive.');
+    }
+  }
+  renderMatrix();
+})();
+
+// ========== FOLDER MANAGEMENT ==========
+async function ensureFolder(parentId,name){
+  const cacheKey=parentId+'/'+name;
+  if(folderCache[cacheKey])return folderCache[cacheKey];
+  const search=await graphRequest(`/me/drive/items/${parentId}/children?$filter=name eq '${encodeURIComponent(name)}'&$select=id,name,webUrl`);
+  const existing=(search.value||[]).find(f=>f.name===name);
+  if(existing){folderCache[cacheKey]=existing;return existing;}
+  const created=await graphRequest(`/me/drive/items/${parentId}/children`,{
+    method:'POST',
+    body:JSON.stringify({name,folder:{},['@microsoft.graph.conflictBehavior']:'rename'})
+  });
+  folderCache[cacheKey]=created;
+  return created;
+}
+
+async function setupFoldersAndLoad(){
+  setStatus('Setting up OneDrive...');
+  try{
+    const root=await ensureFolder('root','Nordic_QC3');
+    rootFolderId=root.id;
+    await loadProjectTests();
+  }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
+}
+
+async function getModuleHVACFolder(modName,testTypeKey){
+  const projFolder=await ensureFolder(rootFolderId,proj().folder);
+  const modFolder=await ensureFolder(projFolder.id,modName);
+  const hvacRoot=await ensureFolder(modFolder.id,`${modName} HVAC Tests`);
+  const testFolder=await ensureFolder(hvacRoot.id,TEST_TYPES[testTypeKey].folder);
+  return testFolder;
+}
+
+// ========== LOAD ALL TESTS FOR PROJECT ==========
+async function loadProjectTests(){
+  if(!rootFolderId)return;
+  setStatus('Loading test data...');
+  if(!testsData[currentProject])testsData[currentProject]={};
+  const mods=proj().modules;
+  for(const mod of mods){
+    if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
+    for(const tk of Object.keys(TEST_TYPES)){
+      try{
+        const folder=await getModuleHVACFolder(mod,tk);
+        // List JSON files in folder
+        const res=await graphRequest(`/me/drive/items/${folder.id}/children?$select=id,name&$top=50`);
+        const files=(res.value||[]).filter(f=>f.name.endsWith('.json'));
+        if(files.length>0){
+          // Load most recent (last file alphabetically)
+          files.sort((a,b)=>b.name.localeCompare(a.name));
+          const content=await graphRequest(`/me/drive/items/${files[0].id}/content`);
+          const text=await content.text();
+          const data=JSON.parse(text);
+          testsData[currentProject][mod][tk]={fileId:files[0].id,fileName:files[0].name,data};
+        } else {
+          testsData[currentProject][mod][tk]=null;
+        }
+      }catch(e){
+        testsData[currentProject][mod][tk]=null;
+      }
+    }
+  }
+  setStatus('Loaded ✓');
+  renderMatrix();
+}
+
+// ========== OVERVIEW MATRIX ==========
+function renderMatrix(){
+  const wrap=document.getElementById('matrix-wrap');
+  const mods=proj().modules;
+  const tks=Object.keys(TEST_TYPES);
+  const pd=testsData[currentProject]||{};
+
+  let html=`<table class="matrix-table">
+    <thead><tr>
+      <th class="mod-col">Module</th>`;
+  for(const tk of tks){
+    html+=`<th>${tk}<br><span style="font-weight:400;font-size:10px;opacity:0.85">${TEST_TYPES[tk].folder.replace(tk+' ','')}</span></th>`;
+  }
+  html+=`</tr></thead><tbody>`;
+
+  for(const mod of mods){
+    html+=`<tr><td class="mod-name">${mod}</td>`;
+    for(const tk of tks){
+      const entry=(pd[mod]||{})[tk];
+      if(!msConnected){
+        html+=`<td class="cell-empty">—</td>`;
+      } else if(entry&&entry.data){
+        const d=entry.data;
+        const dateStr=d.date||'';
+        const res=d.result||'';
+        const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':'#999';
+        html+=`<td class="cell-done" onclick="openTest('${mod}','${tk}')" style="color:${color}" title="Click to view/edit">
+          ${dateStr}<br><span style="font-size:10px">${res}</span>
+        </td>`;
+      } else {
+        html+=`<td><button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button></td>`;
+      }
+    }
+    html+=`</tr>`;
+  }
+  html+=`</tbody></table>`;
+  html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Click any date cell to view or edit a test. Click "+ Add" to record a new test.</p>`;
+  wrap.innerHTML=html;
+}
+
+// ========== START / OPEN TEST ==========
+function startTest(mod,testType){
+  currentTestCtx={module:mod,testType,data:null};
+  renderTestForm();
+  document.getElementById('tab-test').style.display='';
+  showTab('test');
+}
+
+function openTest(mod,testType){
+  const entry=(testsData[currentProject]||{})[mod]?.[testType];
+  currentTestCtx={module:mod,testType,data:entry?entry.data:null,fileId:entry?entry.fileId:null,fileName:entry?entry.fileName:null};
+  renderTestForm();
+  document.getElementById('tab-test').style.display='';
+  showTab('test');
+}
+
+// ========== RENDER TEST FORM ==========
+function renderTestForm(){
+  const {module:mod,testType,data}=currentTestCtx;
+  const tt=TEST_TYPES[testType];
+  const d=data||{};
+  let html=`<h2 style="font-size:16px;font-weight:700;color:#1a3a2a;margin-bottom:14px">${tt.label}<span style="font-size:12px;color:#888;font-weight:400;margin-left:10px">${mod}</span></h2>`;
+
+  if(tt.type==='heating'){html+=renderHeatingForm(d,testType);}
+  else if(tt.type==='sewer'){html+=renderSewerForm(d);}
+  else if(tt.type==='water'){html+=renderWaterForm(d);}
+
+  document.getElementById('test-form-content').innerHTML=html;
+  // After render, set up photo slots
+  setupPhotoSlots();
+  updateDiffs();
+}
+
+// ---- HEATING FORM (QC-4.0 / QC-4.1) ----
+function renderHeatingForm(d,testType){
+  const scopeOpts=HEATING_SCOPES.map(s=>`<option ${d.system_scope===s?'selected':''}>${s}</option>`).join('');
+  const perfOpts=PERFORMERS.map(p=>`<option ${d.performed_by===p?'selected':''}>${p}</option>`).join('');
+  return `
+  <div class="form-card">
+    <h3>1. Basic Information</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>System Scope</label>
+        <select id="f-scope"><option value="">— Select —</option>${scopeOpts}</select></div>
+      <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
+    </div>
+  </div>
+  <div class="form-card">
+    <h3>2. Visual Inspection</h3>
+    <div class="vi-row">
+      <input type="checkbox" id="f-vi" ${d.visual_inspection?'checked':''}/>
+      <label for="f-vi">The visual inspection of all pipe connections has been completed before testing.</label>
+    </div>
+  </div>
+  <div class="form-card">
+    <h3>3. Pressure Measurements</h3>
+    <p class="section-sub">Test pressure: 8 bar · Test duration: 2 hours per part · Acceptance criterion: Δ = 0 bar</p>
+    <table class="meas-table">
+      <thead><tr><th></th><th>Start Time</th><th>End Time</th><th>Pressure Start (bar)</th><th>Pressure End (bar)</th><th>Difference (bar)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Part I</td>
+          <td><input type="time" id="f-p1-ts" value="${d.part_i?.start_time||''}"/></td>
+          <td><input type="time" id="f-p1-te" value="${d.part_i?.end_time||''}"/></td>
+          <td><input type="number" id="f-p1-ps" step="0.1" value="${d.part_i?.pressure_start??''}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p1-pe" step="0.1" value="${d.part_i?.pressure_end??''}" oninput="updateDiffs()"/></td>
+          <td class="diff-cell" id="diff-p1">—</td>
+        </tr>
+        <tr>
+          <td>Part II</td>
+          <td><input type="time" id="f-p2-ts" value="${d.part_ii?.start_time||''}"/></td>
+          <td><input type="time" id="f-p2-te" value="${d.part_ii?.end_time||''}"/></td>
+          <td><input type="number" id="f-p2-ps" step="0.1" value="${d.part_ii?.pressure_start??''}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p2-pe" step="0.1" value="${d.part_ii?.pressure_end??''}" oninput="updateDiffs()"/></td>
+          <td class="diff-cell" id="diff-p2">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="form-card">
+    <h3>4. Photos</h3>
+    <div class="photo-grid">
+      ${renderPhotoSlot('ph-p1-start','Part I — Start',d.part_i?.start_photo_id)}
+      ${renderPhotoSlot('ph-p1-end','Part I — End',d.part_i?.end_photo_id)}
+      ${renderPhotoSlot('ph-p2-start','Part II — Start',d.part_ii?.start_photo_id)}
+      ${renderPhotoSlot('ph-p2-end','Part II — End',d.part_ii?.end_photo_id)}
+    </div>
+  </div>
+  ${renderPersonnelAndResult(d)}`;
+}
+
+// ---- SEWER FORM (QC-4.2) ----
+function renderSewerForm(d){
+  const perfOpts=PERFORMERS.map(p=>`<option ${d.performed_by===p?'selected':''}>${p}</option>`).join('');
+  return `
+  <div class="form-card">
+    <h3>1. Basic Information</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
+      <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
+      <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
+    </div>
+  </div>
+  <div class="form-card">
+    <h3>2. Measurements</h3>
+    <p class="section-sub">Test duration: 30 minutes · Acceptance criterion: |Δ| ≤ 1 mm</p>
+    <table class="meas-table">
+      <thead><tr><th>Water Level Start (mm)</th><th>Water Level End (mm)</th><th>Difference (mm)</th></tr></thead>
+      <tbody><tr>
+        <td><input type="number" id="f-wl-start" step="0.1" value="${d.water_level_start??''}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-wl-end" step="0.1" value="${d.water_level_end??''}" oninput="updateDiffs()"/></td>
+        <td class="diff-cell" id="diff-wl">—</td>
+      </tr></tbody>
+    </table>
+  </div>
+  <div class="form-card">
+    <h3>3. Photos</h3>
+    <div class="photo-grid">
+      ${renderPhotoSlot('ph-sewer-start','Start',d.start_photo_id)}
+      ${renderPhotoSlot('ph-sewer-end','End',d.end_photo_id)}
+      ${renderPhotoSlot('ph-sewer-overview','Overview',d.overview_photo_id)}
+    </div>
+  </div>
+  ${renderPersonnelAndResult(d)}`;
+}
+
+// ---- WATER FORM (QC-5.0) ----
+function renderWaterForm(d){
+  const scopeOpts=WATER_SCOPES.map(s=>`<option ${d.system_scope===s?'selected':''}>${s}</option>`).join('');
+  return `
+  <div class="form-card">
+    <h3>1. Basic Information</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>System Scope</label>
+        <select id="f-scope"><option value="">— Select —</option>${scopeOpts}</select></div>
+      <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
+      <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
+      <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
+    </div>
+  </div>
+  <div class="form-card">
+    <h3>2. Leak Test — 8 bar / 2 hours</h3>
+    <p class="section-sub">Test pressure: 8 bar (0.8 MPa) · Test time: 120 minutes · Acceptance criterion: Δ = 0 bar</p>
+    <div class="pipe-label"><span class="pipe-dot" style="background:#e53935"></span> HOT Water Pipes</div>
+    <table class="meas-table">
+      <thead><tr><th>Pressure Start — HOT (bar)</th><th>Pressure End — HOT (bar)</th><th>Difference (bar)</th></tr></thead>
+      <tbody><tr>
+        <td><input type="number" id="f-hot-ps" step="0.1" value="${d.hot?.pressure_start??''}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-hot-pe" step="0.1" value="${d.hot?.pressure_end??''}" oninput="updateDiffs()"/></td>
+        <td class="diff-cell" id="diff-hot">—</td>
+      </tr></tbody>
+    </table>
+    <div class="pipe-label" style="margin-top:14px"><span class="pipe-dot" style="background:#1565c0"></span> COLD Water Pipes</div>
+    <table class="meas-table">
+      <thead><tr><th>Pressure Start — COLD (bar)</th><th>Pressure End — COLD (bar)</th><th>Difference (bar)</th></tr></thead>
+      <tbody><tr>
+        <td><input type="number" id="f-cold-ps" step="0.1" value="${d.cold?.pressure_start??''}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-cold-pe" step="0.1" value="${d.cold?.pressure_end??''}" oninput="updateDiffs()"/></td>
+        <td class="diff-cell" id="diff-cold">—</td>
+      </tr></tbody>
+    </table>
+  </div>
+  <div class="form-card">
+    <h3>3. Photos</h3>
+    <div class="photo-grid">
+      ${renderPhotoSlot('ph-hot-start','HOT — Start',d.hot?.start_photo_id)}
+      ${renderPhotoSlot('ph-hot-end','HOT — End',d.hot?.end_photo_id)}
+      ${renderPhotoSlot('ph-cold-start','COLD — Start',d.cold?.start_photo_id)}
+      ${renderPhotoSlot('ph-cold-end','COLD — End',d.cold?.end_photo_id)}
+    </div>
+  </div>
+  ${renderPersonnelAndResult(d)}`;
+}
+
+// ---- PERSONNEL + RESULT ----
+function renderPersonnelAndResult(d){
+  const perfOpts=PERFORMERS.map(p=>`<option ${d.performed_by===p?'selected':''}>${p}</option>`).join('');
+  return `
+  <div class="form-card">
+    <h3>4. Personnel</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Performed by</label>
+        <select id="f-performer"><option value="">— Select —</option>${perfOpts}</select></div>
+      <div class="form-group"><label>QC Representative</label>
+        <input type="text" value="${QC_REP}" readonly style="background:#f0f0f0"/></div>
+    </div>
+  </div>
+  <div class="form-card">
+    <div id="result-bar" class="result-bar pending"><span class="result-label" id="result-label">—</span><span style="font-size:12px;color:#999">Result auto-calculated</span></div>
+  </div>
+  <div class="form-card">
+    <h3>5. Notes</h3>
+    <div class="form-group"><textarea id="f-notes" placeholder="Additional notes...">${d.notes||''}</textarea></div>
+  </div>
+  <div class="action-row">
+    <button class="btn-primary" onclick="saveTest()">💾 Save Test</button>
+    <button class="btn-secondary" onclick="exportPDF()">📄 Export PDF</button>
+  </div>`;
+}
+
+// ---- PHOTO SLOT ----
+function renderPhotoSlot(slotId,label,driveId){
+  return `<div class="photo-slot" id="slot-${slotId}" onclick="clickPhotoSlot('${slotId}')">
+    <div class="photo-label">${label}</div>
+    <div class="uploading-overlay" id="upl-${slotId}" style="display:none">Uploading...</div>
+  </div>`;
+}
+
+function setupPhotoSlots(){
+  // Load thumbnails for existing photos
+  const slots=document.querySelectorAll('.photo-slot[id^="slot-"]');
+  slots.forEach(slot=>{
+    const slotId=slot.id.replace('slot-','');
+    const d=currentTestCtx.data||{};
+    let driveId=null;
+    // Map slotId to data field
+    const map=getPhotoMap(d);
+    if(map[slotId])driveId=map[slotId];
+    if(driveId)loadThumbnail(slotId,driveId);
+  });
+  updateDiffs();
+}
+
+function getPhotoMap(d){
+  const t=currentTestCtx.testType;
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    return{'ph-p1-start':d.part_i?.start_photo_id,'ph-p1-end':d.part_i?.end_photo_id,'ph-p2-start':d.part_ii?.start_photo_id,'ph-p2-end':d.part_ii?.end_photo_id};
+  }
+  if(t==='QC-4.2'){
+    return{'ph-sewer-start':d.start_photo_id,'ph-sewer-end':d.end_photo_id,'ph-sewer-overview':d.overview_photo_id};
+  }
+  if(t==='QC-5.0'){
+    return{'ph-hot-start':d.hot?.start_photo_id,'ph-hot-end':d.hot?.end_photo_id,'ph-cold-start':d.cold?.start_photo_id,'ph-cold-end':d.cold?.end_photo_id};
+  }
+  return{};
+}
+
+async function loadThumbnail(slotId,driveId){
+  try{
+    const token=await ensureToken();
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/thumbnails/0/medium`,{headers:{Authorization:`Bearer ${token}`}});
+    const data=await res.json();
+    if(data.url)setSlotImage(slotId,data.url,driveId);
+  }catch(e){console.warn('Thumb error',slotId,e);}
+}
+
+function setSlotImage(slotId,url,driveId){
+  const slot=document.getElementById('slot-'+slotId);
+  if(!slot)return;
+  const label=slot.querySelector('.photo-label')?.textContent||'';
+  slot.innerHTML=`
+    <img src="${url}" alt="photo"/>
+    <div class="photo-label-overlay">${label}</div>
+    <button class="remove-btn" onclick="removePhoto(event,'${slotId}','${driveId}')">✕</button>`;
+  slot.setAttribute('data-drive-id',driveId);
+  slot.onclick=null;
+}
+
+function clickPhotoSlot(slotId){
+  currentPhotoSlot=slotId;
+  // Try camera first on mobile
+  const ci=document.getElementById('camera-input');
+  ci.click();
+}
+
+document.getElementById('camera-input').onchange=handlePhotoInput;
+document.getElementById('photo-input').onchange=handlePhotoInput;
+
+async function handlePhotoInput(e){
+  const file=e.target.files[0];
+  if(!file||!currentPhotoSlot)return;
+  e.target.value='';
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  // Show preview immediately
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const slot=document.getElementById('slot-'+currentPhotoSlot);
+    const label=slot?.querySelector('.photo-label')?.textContent||currentPhotoSlot;
+    if(slot){
+      slot.innerHTML=`<img src="${ev.target.result}" alt="photo"/>
+        <div class="photo-label-overlay">${label}</div>
+        <div class="uploading-overlay" id="upl-${currentPhotoSlot}">Uploading...</div>`;
+    }
+  };
+  reader.readAsDataURL(file);
+  // Upload
+  try{
+    const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
+    const fname=`${currentTestCtx.module.replace(/[ -]/g,'')}_${currentPhotoSlot}_${Date.now()}.jpg`.replace(/\s/g,'_');
+    const buf=await file.arrayBuffer();
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${folder.id}:/${fname}:/content`,{
+      method:'PUT',
+      headers:{Authorization:`Bearer ${await ensureToken()}`,'Content-Type':'image/jpeg'},
+      body:buf
+    });
+    const data=await res.json();
+    const driveId=data.id;
+    // Store in context
+    storePhotoId(currentPhotoSlot,driveId);
+    // Remove uploading overlay, add remove btn
+    const slot=document.getElementById('slot-'+currentPhotoSlot);
+    const upl=document.getElementById('upl-'+currentPhotoSlot);
+    if(upl)upl.style.display='none';
+    if(slot){slot.setAttribute('data-drive-id',driveId);slot.onclick=null;}
+    setStatus('Photo uploaded ✓');
+    updateDiffs();
+  }catch(err){setStatus('Photo upload error: '+err.message);}
+}
+
+function storePhotoId(slotId,driveId){
+  if(!currentTestCtx.data)currentTestCtx.data={};
+  const d=currentTestCtx.data;
+  const t=currentTestCtx.testType;
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    if(slotId==='ph-p1-start'){if(!d.part_i)d.part_i={};d.part_i.start_photo_id=driveId;}
+    if(slotId==='ph-p1-end'){if(!d.part_i)d.part_i={};d.part_i.end_photo_id=driveId;}
+    if(slotId==='ph-p2-start'){if(!d.part_ii)d.part_ii={};d.part_ii.start_photo_id=driveId;}
+    if(slotId==='ph-p2-end'){if(!d.part_ii)d.part_ii={};d.part_ii.end_photo_id=driveId;}
+  }
+  if(t==='QC-4.2'){
+    if(slotId==='ph-sewer-start')d.start_photo_id=driveId;
+    if(slotId==='ph-sewer-end')d.end_photo_id=driveId;
+    if(slotId==='ph-sewer-overview')d.overview_photo_id=driveId;
+  }
+  if(t==='QC-5.0'){
+    if(slotId==='ph-hot-start'){if(!d.hot)d.hot={};d.hot.start_photo_id=driveId;}
+    if(slotId==='ph-hot-end'){if(!d.hot)d.hot={};d.hot.end_photo_id=driveId;}
+    if(slotId==='ph-cold-start'){if(!d.cold)d.cold={};d.cold.start_photo_id=driveId;}
+    if(slotId==='ph-cold-end'){if(!d.cold)d.cold={};d.cold.end_photo_id=driveId;}
+  }
+}
+
+async function removePhoto(e,slotId,driveId){
+  e.stopPropagation();
+  if(!confirm('Remove this photo?'))return;
+  // Restore empty slot
+  const slot=document.getElementById('slot-'+slotId);
+  const labelMap={'ph-p1-start':'Part I — Start','ph-p1-end':'Part I — End','ph-p2-start':'Part II — Start','ph-p2-end':'Part II — End','ph-sewer-start':'Start','ph-sewer-end':'End','ph-sewer-overview':'Overview','ph-hot-start':'HOT — Start','ph-hot-end':'HOT — End','ph-cold-start':'COLD — Start','ph-cold-end':'COLD — End'};
+  if(slot){
+    slot.innerHTML=`<div class="photo-label">${labelMap[slotId]||slotId}</div>`;
+    slot.onclick=()=>clickPhotoSlot(slotId);
+  }
+  storePhotoId(slotId,null);
+  // Delete from OneDrive
+  try{await graphRequest(`/me/drive/items/${driveId}`,{method:'DELETE'});}catch(e){}
+  updateDiffs();
+}
+
+// ========== DIFF CALCULATION ==========
+function updateDiffs(){
+  const t=currentTestCtx?.testType;
+  if(!t)return;
+
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    const p1s=parseFloat(document.getElementById('f-p1-ps')?.value);
+    const p1e=parseFloat(document.getElementById('f-p1-pe')?.value);
+    const p2s=parseFloat(document.getElementById('f-p2-ps')?.value);
+    const p2e=parseFloat(document.getElementById('f-p2-pe')?.value);
+    const d1=isNaN(p1s)||isNaN(p1e)?null:+(p1e-p1s).toFixed(2);
+    const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
+    setDiffCell('diff-p1',d1,0);
+    setDiffCell('diff-p2',d2,0);
+    const passed=d1!==null&&d2!==null&&d1===0&&d2===0;
+    const failed=d1!==null&&d2!==null&&(d1!==0||d2!==0);
+    setResult(passed,failed);
+  }
+  if(t==='QC-4.2'){
+    const ws=parseFloat(document.getElementById('f-wl-start')?.value);
+    const we=parseFloat(document.getElementById('f-wl-end')?.value);
+    const diff=isNaN(ws)||isNaN(we)?null:+(we-ws).toFixed(1);
+    setDiffCell('diff-wl',diff,1,'mm');
+    const passed=diff!==null&&Math.abs(diff)<=1;
+    const failed=diff!==null&&Math.abs(diff)>1;
+    setResult(passed,failed);
+  }
+  if(t==='QC-5.0'){
+    const hs=parseFloat(document.getElementById('f-hot-ps')?.value);
+    const he=parseFloat(document.getElementById('f-hot-pe')?.value);
+    const cs=parseFloat(document.getElementById('f-cold-ps')?.value);
+    const ce=parseFloat(document.getElementById('f-cold-pe')?.value);
+    const dh=isNaN(hs)||isNaN(he)?null:+(he-hs).toFixed(2);
+    const dc=isNaN(cs)||isNaN(ce)?null:+(ce-cs).toFixed(2);
+    setDiffCell('diff-hot',dh,0);
+    setDiffCell('diff-cold',dc,0);
+    const passed=dh!==null&&dc!==null&&dh===0&&dc===0;
+    const failed=dh!==null&&dc!==null&&(dh!==0||dc!==0);
+    setResult(passed,failed);
+  }
+}
+
+function setDiffCell(id,val,tolerance,unit='bar'){
+  const el=document.getElementById(id);
+  if(!el)return;
+  if(val===null){el.textContent='—';el.className='diff-cell';return;}
+  const ok=Math.abs(val)<=tolerance;
+  el.textContent=`${val} ${unit}`;
+  el.className='diff-cell'+(ok?'':' fail');
+}
+
+function setResult(passed,failed){
+  const bar=document.getElementById('result-bar');
+  const lbl=document.getElementById('result-label');
+  if(!bar||!lbl)return;
+  if(passed){bar.className='result-bar passed';lbl.textContent='PASSED';}
+  else if(failed){bar.className='result-bar failed';lbl.textContent='FAILED';}
+  else{bar.className='result-bar pending';lbl.textContent='—';}
+}
+
+// ========== COLLECT FORM DATA ==========
+function collectFormData(){
+  const t=currentTestCtx.testType;
+  const existing=currentTestCtx.data||{};
+  const base={
+    test_type:t,
+    project:currentProject,
+    module:currentTestCtx.module,
+    date:document.getElementById('f-date')?.value||todayISO(),
+    performed_by:document.getElementById('f-performer')?.value||'',
+    qc_representative:QC_REP,
+    notes:document.getElementById('f-notes')?.value||'',
+    saved_at:new Date().toISOString()
+  };
+
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    const p1s=parseFloat(document.getElementById('f-p1-ps').value);
+    const p1e=parseFloat(document.getElementById('f-p1-pe').value);
+    const p2s=parseFloat(document.getElementById('f-p2-ps').value);
+    const p2e=parseFloat(document.getElementById('f-p2-pe').value);
+    const d1=isNaN(p1s)||isNaN(p1e)?null:+(p1e-p1s).toFixed(2);
+    const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
+    base.system_scope=document.getElementById('f-scope')?.value||'';
+    base.visual_inspection=document.getElementById('f-vi')?.checked||false;
+    base.part_i={start_time:document.getElementById('f-p1-ts').value,end_time:document.getElementById('f-p1-te').value,pressure_start:p1s,pressure_end:p1e,difference:d1,start_photo_id:existing.part_i?.start_photo_id||null,end_photo_id:existing.part_i?.end_photo_id||null};
+    base.part_ii={start_time:document.getElementById('f-p2-ts').value,end_time:document.getElementById('f-p2-te').value,pressure_start:p2s,pressure_end:p2e,difference:d2,start_photo_id:existing.part_ii?.start_photo_id||null,end_photo_id:existing.part_ii?.end_photo_id||null};
+    base.result=(d1!==null&&d2!==null&&d1===0&&d2===0)?'Passed':(d1!==null&&d2!==null?'Failed':'');
+  }
+  if(t==='QC-4.2'){
+    const ws=parseFloat(document.getElementById('f-wl-start').value);
+    const we=parseFloat(document.getElementById('f-wl-end').value);
+    const diff=isNaN(ws)||isNaN(we)?null:+(we-ws).toFixed(1);
+    base.start_time=document.getElementById('f-start-time')?.value||'';
+    base.end_time=document.getElementById('f-end-time')?.value||'';
+    base.water_level_start=ws;base.water_level_end=we;base.difference=diff;
+    base.start_photo_id=existing.start_photo_id||null;
+    base.end_photo_id=existing.end_photo_id||null;
+    base.overview_photo_id=existing.overview_photo_id||null;
+    base.result=diff!==null?(Math.abs(diff)<=1?'Passed':'Failed'):'';
+  }
+  if(t==='QC-5.0'){
+    const hs=parseFloat(document.getElementById('f-hot-ps').value);
+    const he=parseFloat(document.getElementById('f-hot-pe').value);
+    const cs=parseFloat(document.getElementById('f-cold-ps').value);
+    const ce=parseFloat(document.getElementById('f-cold-pe').value);
+    const dh=isNaN(hs)||isNaN(he)?null:+(he-hs).toFixed(2);
+    const dc=isNaN(cs)||isNaN(ce)?null:+(ce-cs).toFixed(2);
+    base.system_scope=document.getElementById('f-scope')?.value||'';
+    base.start_time=document.getElementById('f-start-time')?.value||'';
+    base.end_time=document.getElementById('f-end-time')?.value||'';
+    base.hot={pressure_start:hs,pressure_end:he,difference:dh,start_photo_id:existing.hot?.start_photo_id||null,end_photo_id:existing.hot?.end_photo_id||null};
+    base.cold={pressure_start:cs,pressure_end:ce,difference:dc,start_photo_id:existing.cold?.start_photo_id||null,end_photo_id:existing.cold?.end_photo_id||null};
+    base.result=(dh!==null&&dc!==null&&dh===0&&dc===0)?'Passed':(dh!==null&&dc!==null?'Failed':'');
+  }
+  return base;
+}
+
+// ========== SAVE ==========
+async function saveTest(){
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  setStatus('Saving...');
+  try{
+    const data=collectFormData();
+    const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
+    const mod=currentTestCtx.module.replace(/[ -]/g,'');
+    const dateStr=(data.date||todayISO()).replace(/-/g,'');
+    const fname=`${mod}_${currentTestCtx.testType}_${dateStr}.json`;
+    const body=JSON.stringify(data,null,2);
+    let fileId=currentTestCtx.fileId;
+    if(fileId){
+      await graphRequest(`/me/drive/items/${fileId}/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body});
+    } else {
+      const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body});
+      fileId=res.id;
+      currentTestCtx.fileId=fileId;
+      currentTestCtx.fileName=fname;
+    }
+    currentTestCtx.data=data;
+    if(!testsData[currentProject])testsData[currentProject]={};
+    if(!testsData[currentProject][currentTestCtx.module])testsData[currentProject][currentTestCtx.module]={};
+    testsData[currentProject][currentTestCtx.module][currentTestCtx.testType]={fileId,fileName:fname,data};
+    setStatus('Saved ✓ '+new Date().toLocaleTimeString());
+    updateDiffs();
+  }catch(e){setStatus('Save error: '+e.message);console.error(e);}
+}
+
+// ========== PDF EXPORT ==========
+function exportPDF(){
+  const data=collectFormData();
+  const t=currentTestCtx.testType;
+  const tt=TEST_TYPES[t];
+  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <style>
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a1a;margin:30px;}
+    h1{font-size:18px;font-weight:800;color:#1a3a2a;margin:0 0 2px;}
+    h2{font-size:11px;color:#555;font-weight:400;margin:0 0 16px;}
+    .line{border:none;border-top:2px solid #2d5a3d;margin:8px 0 12px;}
+    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#1a3a2a;border-bottom:1px solid #ccc;padding-bottom:3px;margin:14px 0 8px;}
+    .row{display:flex;margin-bottom:5px;}
+    .lbl{width:200px;color:#555;}
+    .val{font-weight:600;}
+    .result-box{display:inline-block;padding:6px 20px;font-size:18px;font-weight:800;border-radius:6px;margin-top:10px;}
+    .passed{background:#e8f5e9;color:#2e7d32;border:2px solid #4caf50;}
+    .failed{background:#ffebee;color:#c62828;border:2px solid #f44336;}
+    .photos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;}
+    .photo-block img{width:100%;border-radius:4px;}
+    .photo-lbl{font-size:10px;font-weight:700;margin-bottom:3px;color:#555;}
+    @media print{body{margin:15px;}}
+  </style></head><body>
+  <h1>${tt.label.toUpperCase()}</h1>
+  <h2>${tt.folder}</h2>${data.system_scope?`<strong>${data.system_scope}</strong>`:''}
+  <hr class="line"/>
+  <div class="section">1. Basic Info</div>
+  <div class="row"><span class="lbl">Project</span><span class="val">${proj().label}</span></div>
+  <div class="row"><span class="lbl">Module No.</span><span class="val">${data.module}</span></div>
+  <div class="row"><span class="lbl">Date</span><span class="val">${data.date}</span></div>`;
+
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    html+=`<div class="section">2. Pressure Measurements</div>
+    <table style="border-collapse:collapse;width:100%">
+    <tr style="background:#f0f8f2"><th style="padding:5px;border:1px solid #ddd;text-align:left"></th><th style="padding:5px;border:1px solid #ddd">Start Time</th><th style="padding:5px;border:1px solid #ddd">End Time</th><th style="padding:5px;border:1px solid #ddd">Pressure Start</th><th style="padding:5px;border:1px solid #ddd">Pressure End</th><th style="padding:5px;border:1px solid #ddd">Difference</th></tr>
+    <tr><td style="padding:5px;border:1px solid #ddd;font-weight:700">Part I</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.start_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.end_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.pressure_start??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.pressure_end??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center;font-weight:700">${data.part_i?.difference??'—'} bar</td></tr>
+    <tr><td style="padding:5px;border:1px solid #ddd;font-weight:700">Part II</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.start_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.end_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.pressure_start??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.pressure_end??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center;font-weight:700">${data.part_ii?.difference??'—'} bar</td></tr>
+    </table>`;
+  }
+  if(t==='QC-4.2'){
+    html+=`<div class="section">2. Measurements</div>
+    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||''}</span></div>
+    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||''}</span></div>
+    <div class="row"><span class="lbl">Water Level Start</span><span class="val">${data.water_level_start??''} mm</span></div>
+    <div class="row"><span class="lbl">Water Level End</span><span class="val">${data.water_level_end??''} mm</span></div>
+    <div class="row"><span class="lbl">Difference</span><span class="val">${data.difference??'—'} mm</span></div>`;
+  }
+  if(t==='QC-5.0'){
+    html+=`<div class="section">2. Leak Test — 8 bar / 2 hours</div>
+    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||''}</span></div>
+    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||''}</span></div>
+    <div style="font-weight:700;color:#e53935;margin:8px 0 4px">● HOT Water Pipes</div>
+    <div class="row"><span class="lbl">Pressure Start</span><span class="val">${data.hot?.pressure_start??''} bar</span></div>
+    <div class="row"><span class="lbl">Pressure End</span><span class="val">${data.hot?.pressure_end??''} bar</span></div>
+    <div class="row"><span class="lbl">Difference</span><span class="val">${data.hot?.difference??'—'} bar</span></div>
+    <div style="font-weight:700;color:#1565c0;margin:8px 0 4px">● COLD Water Pipes</div>
+    <div class="row"><span class="lbl">Pressure Start</span><span class="val">${data.cold?.pressure_start??''} bar</span></div>
+    <div class="row"><span class="lbl">Pressure End</span><span class="val">${data.cold?.pressure_end??''} bar</span></div>
+    <div class="row"><span class="lbl">Difference</span><span class="val">${data.cold?.difference??'—'} bar</span></div>`;
+  }
+
+  html+=`<div class="section">Personnel</div>
+  <div class="row"><span class="lbl">Performed by</span><span class="val">${data.performed_by||''}</span></div>
+  <div class="row"><span class="lbl">QC Representative</span><span class="val">${data.qc_representative}</span></div>
+  <div><div class="result-box ${data.result==='Passed'?'passed':'failed'}">${data.result||'—'}</div></div>
+  ${data.notes?`<div class="section">Notes</div><p>${data.notes}</p>`:''}
+  <p style="font-size:10px;color:#999;margin-top:30px;border-top:1px solid #eee;padding-top:6px">Nordic Homes — ${tt.label} · Page 1</p>
+  </body></html>`;
+
+  const win=window.open('','_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>win.print(),500);
+}
+</script>
+</body>
+</html>
