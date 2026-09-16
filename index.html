@@ -483,6 +483,12 @@ async function ensureProjectFolderAndLoad(){
     document.getElementById('drive-folder-link').innerHTML=`<a href="${projFolder.webUrl}" target="_blank">Open in OneDrive</a>`;
     moduleFolderIds={};
     driveFileIds={};
+    // Pre-create all module subfolders so HVAC app can find them
+    const allMods=getProjectCfg().modules;
+    for(let i=0;i<allMods.length;i++){
+      setStatus(`Creating module folders… ${i+1}/${allMods.length}`);
+      await ensureModuleFolder(allMods[i]);
+    }
     await loadAllFromDrive();
   }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
 }
@@ -509,9 +515,9 @@ async function loadAllFromDrive(){
 async function loadModuleFromDrive(modName){
   try{
     const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
-    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
-    // Search in project folder
-    const search=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${fname}'&$select=id,name`);
+    // Look in module subfolder (not project root)
+    const modFolderId=await ensureModuleFolder(modName);
+    const search=await graphRequest(`/me/drive/items/${modFolderId}/children?$filter=name eq '${fname}'&$select=id,name`);
     const files=search.value||[];
     if(files.length>0){
       driveFileIds[modName]=files[0].id;
