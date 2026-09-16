@@ -436,6 +436,7 @@ async function setupFoldersAndLoad(){
       currentUserEmail=(me.mail||me.userPrincipalName||'').toLowerCase();
     }catch(e){currentUserEmail='';}
     updateRoleUI();
+    startAutoRefresh();
     await loadProjectTests();
   }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
 }
@@ -444,6 +445,25 @@ function updateRoleUI(){
   const roleLabel=isAdmin()?'👑 Admin':'👷 Technician';
   document.getElementById('connect-btn').title=currentUserEmail+' — '+roleLabel;
 }
+
+// Auto-refresh every 2 min when tab is visible
+let autoRefreshTimer=null;
+function startAutoRefresh(){
+  if(autoRefreshTimer)clearInterval(autoRefreshTimer);
+  autoRefreshTimer=setInterval(()=>{
+    if(!document.hidden&&msConnected&&!loadingTests){
+      loadingTests=false; // reset lock
+      loadProjectTests();
+    }
+  },120000); // every 2 min
+}
+// Refresh immediately when tab becomes visible again
+document.addEventListener('visibilitychange',()=>{
+  if(!document.hidden&&msConnected&&!loadingTests){
+    loadingTests=false;
+    loadProjectTests();
+  }
+});
 
 async function getModuleHVACFolder(modName,testTypeKey){
   const projFolder=await ensureFolder(rootFolderId,proj().folder);
@@ -471,7 +491,7 @@ function loadFromCache(){
     if(!raw)return false;
     const payload=JSON.parse(raw);
     // Use cache up to 10 min old
-    if(Date.now()-payload.ts>600000)return false;
+    if(Date.now()-payload.ts>120000)return false; // 2 min TTL
     testsData[currentProject]=payload.data||{};
     return true;
   }catch(e){return false;}
