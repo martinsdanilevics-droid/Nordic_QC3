@@ -1299,119 +1299,195 @@ async function exportPDF(){
   const data=collectFormData();
   const t=currentTestCtx.testType;
   const tt=TEST_TYPES[t];
-  let html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
-  <style>
-    body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#1a1a1a;margin:30px;}
-    h1{font-size:18px;font-weight:800;color:#1a3a2a;margin:0 0 2px;}
-    h2{font-size:11px;color:#555;font-weight:400;margin:0 0 16px;}
-    .line{border:none;border-top:2px solid #2d5a3d;margin:8px 0 12px;}
-    .section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#1a3a2a;border-bottom:1px solid #ccc;padding-bottom:3px;margin:14px 0 8px;}
-    .row{display:flex;margin-bottom:5px;}
-    .lbl{width:200px;color:#555;}
-    .val{font-weight:600;}
-    .result-box{display:inline-block;padding:6px 20px;font-size:18px;font-weight:800;border-radius:6px;margin-top:10px;}
-    .passed{background:#e8f5e9;color:#2e7d32;border:2px solid #4caf50;}
-    .failed{background:#ffebee;color:#c62828;border:2px solid #f44336;}
-    .photos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;}
-    .photo-block img{width:100%;border-radius:4px;}
-    .photo-lbl{font-size:10px;font-weight:700;margin-bottom:3px;color:#555;}
-    @media print{body{margin:15px;}}
-  </style></head><body>
-  <h1>${tt.label.toUpperCase()}</h1>
-  <h2>${tt.folder}</h2>${data.system_scope?`<strong>${data.system_scope}</strong>`:''}
-  <hr class="line"/>
-  <div class="section">1. Basic Info</div>
-  <div class="row"><span class="lbl">Project</span><span class="val">${proj().label}</span></div>
-  <div class="row"><span class="lbl">Module No.</span><span class="val">${data.module}</span></div>
-  <div class="row"><span class="lbl">Date</span><span class="val">${data.date}</span></div>`;
 
-  if(t==='QC-4.0'||t==='QC-4.1'){
-    html+=`<div class="section">2. Pressure Measurements</div>
-    <table style="border-collapse:collapse;width:100%">
-    <tr style="background:#f0f8f2"><th style="padding:5px;border:1px solid #ddd;text-align:left"></th><th style="padding:5px;border:1px solid #ddd">Start Time</th><th style="padding:5px;border:1px solid #ddd">End Time</th><th style="padding:5px;border:1px solid #ddd">Pressure Start</th><th style="padding:5px;border:1px solid #ddd">Pressure End</th><th style="padding:5px;border:1px solid #ddd">Difference</th></tr>
-    <tr><td style="padding:5px;border:1px solid #ddd;font-weight:700">Part I</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.start_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.end_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.pressure_start??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_i?.pressure_end??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center;font-weight:700">${data.part_i?.difference??'—'} bar</td></tr>
-    <tr><td style="padding:5px;border:1px solid #ddd;font-weight:700">Part II</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.start_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.end_time||''}</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.pressure_start??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center">${data.part_ii?.pressure_end??''} bar</td><td style="padding:5px;border:1px solid #ddd;text-align:center;font-weight:700">${data.part_ii?.difference??'—'} bar</td></tr>
-    </table>`;
-  }
-  if(t==='QC-4.2'){
-    html+=`<div class="section">2. Measurements</div>
-    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||''}</span></div>
-    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||''}</span></div>
-    <div class="row"><span class="lbl">Water Level Start</span><span class="val">${data.water_level_start??''} mm</span></div>
-    <div class="row"><span class="lbl">Water Level End</span><span class="val">${data.water_level_end??''} mm</span></div>
-    <div class="row"><span class="lbl">Difference</span><span class="val">${data.difference??'—'} mm</span></div>`;
-  }
-  if(t==='QC-5.0'){
-    html+=`<div class="section">2. Leak Test — 8 bar / 2 hours</div>
-    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||''}</span></div>
-    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||''}</span></div>
-    <div style="font-weight:700;color:#e53935;margin:8px 0 4px">● HOT Water Pipes</div>
-    <div class="row"><span class="lbl">Pressure Start</span><span class="val">${data.hot?.pressure_start??''} bar</span></div>
-    <div class="row"><span class="lbl">Pressure End</span><span class="val">${data.hot?.pressure_end??''} bar</span></div>
-    <div class="row"><span class="lbl">Difference</span><span class="val">${data.hot?.difference??'—'} bar</span></div>
-    <div style="font-weight:700;color:#1565c0;margin:8px 0 4px">● COLD Water Pipes</div>
-    <div class="row"><span class="lbl">Pressure Start</span><span class="val">${data.cold?.pressure_start??''} bar</span></div>
-    <div class="row"><span class="lbl">Pressure End</span><span class="val">${data.cold?.pressure_end??''} bar</span></div>
-    <div class="row"><span class="lbl">Difference</span><span class="val">${data.cold?.difference??'—'} bar</span></div>`;
-  }
+  // ── File name ──────────────────────────────────────────────────────────────
+  const modSlug=data.module.replace(/\s/g,'-');
+  const dateSlug=(data.date||todayISO()).split('-').reverse().join('-');
+  const scopeSlug=(data.system_scope||'').replace(/\s+with\s+/gi,' - ').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+  const sysSlug=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
+  const pdfName=`${modSlug}_${t}${sysSlug}${scopeSlug?'_'+scopeSlug:''}_${dateSlug}`;
 
-  // Load photos
-  const d2=collectFormData();
+  // ── Load photos ────────────────────────────────────────────────────────────
   const photoEntries=[];
   if(t==='QC-4.0'||t==='QC-4.1'){
     const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'Part I — Start',id:pid.part_i?.start_photo_id});
-    photoEntries.push({label:'Part I — End',id:pid.part_i?.end_photo_id});
-    photoEntries.push({label:'Part II — Start',id:pid.part_ii?.start_photo_id});
-    photoEntries.push({label:'Part II — End',id:pid.part_ii?.end_photo_id});
+    photoEntries.push({label:'ANNEX 1 — Part I: Start',id:pid.part_i?.start_photo_id});
+    photoEntries.push({label:'ANNEX 2 — Part I: End',id:pid.part_i?.end_photo_id});
+    photoEntries.push({label:'ANNEX 3 — Part II: Start',id:pid.part_ii?.start_photo_id});
+    photoEntries.push({label:'ANNEX 4 — Part II: End',id:pid.part_ii?.end_photo_id});
   } else if(t==='QC-4.2'){
     const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'Start',id:pid.start_photo_id});
-    photoEntries.push({label:'End',id:pid.end_photo_id});
-    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
-  } else if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
+    photoEntries.push({label:'ANNEX 1 — Start',id:pid.start_photo_id});
+    photoEntries.push({label:'ANNEX 2 — End',id:pid.end_photo_id});
+    photoEntries.push({label:'ANNEX 3 — Overview',id:pid.overview_photo_id});
+  } else {
     const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
-    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
-    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
-    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+    photoEntries.push({label:'ANNEX 1 — HOT: Start',id:pid.hot?.start_photo_id});
+    photoEntries.push({label:'ANNEX 2 — HOT: End',id:pid.hot?.end_photo_id});
+    photoEntries.push({label:'ANNEX 3 — COLD: Start',id:pid.cold?.start_photo_id});
+    photoEntries.push({label:'ANNEX 4 — COLD: End',id:pid.cold?.end_photo_id});
   }
-  // Load images as base64
   setStatus('Loading photos for PDF...');
   const loadedPhotos=[];
   for(const p of photoEntries){
-    if(p.id){
-      const b64=await getImageBase64(p.id);
-      loadedPhotos.push({label:p.label,src:b64});
-    } else {
-      loadedPhotos.push({label:p.label,src:null});
-    }
-  }
-  const hasPhotos=loadedPhotos.some(p=>p.src);
-  if(hasPhotos){
-    html+=`<div class="section">Photos / Appendix</div><div class="photos">`;
-    for(const p of loadedPhotos){
-      if(p.src){
-        html+=`<div class="photo-block"><div class="photo-lbl">${p.label}</div><img src="${p.src}" style="width:100%;border-radius:4px;max-height:300px;object-fit:contain"/></div>`;
-      }
-    }
-    html+=`</div>`;
+    const src=p.id?await getImageBase64(p.id):null;
+    loadedPhotos.push({...p,src});
   }
   setStatus('');
 
-  html+=`<div class="section">Personnel</div>
-  <div class="row"><span class="lbl">Performed by</span><span class="val">${data.performed_by||''}</span></div>
-  <div class="row"><span class="lbl">QC Representative</span><span class="val">${data.qc_representative}</span></div>
-  <div><div class="result-box ${data.result==='Passed'?'passed':'failed'}">${data.result||'—'}</div></div>
-  ${data.notes?`<div class="section">Notes</div><p>${data.notes}</p>`:''}
-  <p style="font-size:10px;color:#999;margin-top:30px;border-top:1px solid #eee;padding-top:6px">Nordic Homes — ${tt.label} · Page 1</p>
+  // ── Result styling ─────────────────────────────────────────────────────────
+  const res=data.result||'';
+  const resColor=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':res==='Pending'?'#e65100':'#555';
+  const resBg=res==='Passed'?'#e8f5e9':res==='Failed'?'#ffebee':res==='Pending'?'#fff3e0':'#f5f5f5';
+  const resBorder=res==='Passed'?'#4caf50':res==='Failed'?'#f44336':res==='Pending'?'#ff9800':'#bbb';
+  const resIcon=res==='Passed'?'✔':res==='Failed'?'✘':res==='Pending'?'⏳':'—';
+
+  // ── Measurements section ───────────────────────────────────────────────────
+  let measHtml='';
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    measHtml=`<div class="section">2. Pressure Measurements — 8 bar / 2h per part</div>
+    <p class="note">Acceptance criterion: Δ = 0 bar</p>
+    <table class="mtbl">
+      <tr class="th"><th></th><th>Start Time</th><th>End Time</th><th>Pressure Start</th><th>Pressure End</th><th>Difference</th></tr>
+      <tr><td class="rl">Part I</td><td>${data.part_i?.start_time||'—'}</td><td>${data.part_i?.end_time||'—'}</td><td>${data.part_i?.pressure_start??'—'} bar</td><td>${data.part_i?.pressure_end??'—'} bar</td><td class="diff">${data.part_i?.difference??'—'} bar</td></tr>
+      <tr class="alt"><td class="rl">Part II</td><td>${data.part_ii?.start_time||'—'}</td><td>${data.part_ii?.end_time||'—'}</td><td>${data.part_ii?.pressure_start??'—'} bar</td><td>${data.part_ii?.pressure_end??'—'} bar</td><td class="diff">${data.part_ii?.difference??'—'} bar</td></tr>
+    </table>`;
+  } else if(t==='QC-4.2'){
+    measHtml=`<div class="section">2. Measurements — 30 min</div>
+    <p class="note">Acceptance criterion: |Δ| ≤ 1 mm</p>
+    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||'—'}</span></div>
+    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||'—'}</span></div>
+    <div class="row"><span class="lbl">Water Level Start</span><span class="val">${data.water_level_start??'—'} mm</span></div>
+    <div class="row"><span class="lbl">Water Level End</span><span class="val">${data.water_level_end??'—'} mm</span></div>
+    <div class="row"><span class="lbl">Difference</span><span class="val diff">${data.difference??'—'} mm</span></div>`;
+  } else {
+    measHtml=`<div class="section">2. Leak Test — 8 bar / 2 hours</div>
+    <p class="note">Test pressure: 8 bar (0.8 MPa) · Acceptance criterion: Δ = 0 bar</p>
+    <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||'—'}</span></div>
+    <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||'—'}</span></div>
+    <table class="mtbl" style="margin-top:8px">
+      <tr class="th"><th></th><th>Pressure Start</th><th>Pressure End</th><th>Difference</th></tr>
+      <tr><td class="rl" style="color:#c62828">● HOT</td><td>${data.hot?.pressure_start??'—'} bar</td><td>${data.hot?.pressure_end??'—'} bar</td><td class="diff">${data.hot?.difference??'—'} bar</td></tr>
+      <tr class="alt"><td class="rl" style="color:#1565c0">● COLD</td><td>${data.cold?.pressure_start??'—'} bar</td><td>${data.cold?.pressure_end??'—'} bar</td><td class="diff">${data.cold?.difference??'—'} bar</td></tr>
+    </table>`;
+  }
+
+  // ── Photo annexes (each on own page) ──────────────────────────────────────
+  const annexHtml=loadedPhotos.filter(p=>p.src).map(p=>`
+    <div class="annex-page">
+      <div class="annex-header">${p.label}</div>
+      <div class="annex-sub">${tt.label} · ${data.module} · ${data.date}</div>
+      <img src="${p.src}" class="annex-img" alt="${p.label}"/>
+    </div>`).join('');
+
+  // ── Full HTML ──────────────────────────────────────────────────────────────
+  const docHtml=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>${pdfName}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:11.5px;color:#1a1a1a;}
+    .page1{padding:28px 32px 28px;}
+    /* Header */
+    .doc-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+    .doc-title h1{font-size:17px;font-weight:800;color:#1a3a2a;line-height:1.2;margin-bottom:3px;}
+    .doc-title h2{font-size:11px;color:#555;font-weight:400;}
+    .doc-title .scope-tag{display:inline-block;margin-top:5px;background:#e8f5ec;color:#1a3a2a;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;border:1px solid #b2dfdb;}
+    .logo{height:48px;width:auto;}
+    /* Divider */
+    .divider{border:none;border-top:2px solid #2d5a3d;margin:10px 0 14px;}
+    /* Sections */
+    .section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#2d5a3d;border-bottom:1.5px solid #2d5a3d;padding-bottom:3px;margin:14px 0 8px;}
+    .note{font-size:10px;color:#666;font-style:italic;margin-bottom:6px;}
+    /* Rows */
+    .row{display:flex;margin-bottom:4px;align-items:baseline;}
+    .lbl{width:180px;color:#666;font-size:11px;}
+    .val{font-weight:600;font-size:11px;}
+    /* Table */
+    .mtbl{border-collapse:collapse;width:100%;margin-bottom:4px;}
+    .mtbl td,.mtbl th{padding:5px 8px;border:1px solid #ddd;text-align:center;font-size:11px;}
+    .mtbl .th th{background:#1a3a2a;color:#fff;font-weight:600;}
+    .mtbl .rl{text-align:left;font-weight:700;background:#f8fdf9;}
+    .mtbl .alt td{background:#fafafa;}
+    .diff{font-weight:700;color:#1a3a2a;}
+    /* Personnel */
+    .personnel-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;}
+    .person-card{background:#f8fdf9;border:1px solid #ddd;border-radius:6px;padding:8px 12px;}
+    .person-role{font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:2px;}
+    .person-name{font-size:12px;font-weight:700;color:#1a3a2a;}
+    /* Result */
+    .result-block{display:flex;align-items:center;gap:16px;margin-top:14px;padding:14px 18px;border-radius:8px;background:${resBg};border:2px solid ${resBorder};}
+    .result-icon{font-size:32px;color:${resColor};}
+    .result-text .result-word{font-size:22px;font-weight:800;color:${resColor};letter-spacing:1px;}
+    .result-text .result-label{font-size:10px;color:#888;margin-top:1px;}
+    /* Signature */
+    .sig-line{border-top:1px solid #999;width:220px;margin-top:28px;margin-bottom:3px;}
+    .sig-label{font-size:9px;color:#888;}
+    /* Footer */
+    .footer{margin-top:20px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#aaa;display:flex;justify-content:space-between;}
+    /* Annex pages */
+    .annex-page{page-break-before:always;padding:28px 32px;}
+    .annex-header{font-size:15px;font-weight:700;color:#1a3a2a;margin-bottom:4px;}
+    .annex-sub{font-size:10px;color:#888;margin-bottom:14px;}
+    .annex-img{max-width:100%;max-height:220mm;object-fit:contain;border-radius:4px;border:1px solid #eee;}
+    @media print{
+      @page{margin:0;}
+      body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    }
+  </style>
+  </head><body>
+  <div class="page1">
+    <div class="doc-header">
+      <div class="doc-title">
+        <h1>${tt.label.toUpperCase()}</h1>
+        <h2>Nordic Homes — Quality Control Protocol</h2>
+        ${data.system_scope?`<span class="scope-tag">${data.system_scope}${data.system_no&&data.system_no!=='N/A'?' · '+data.system_no:''}</span>`:''}
+      </div>
+      <img class="logo" src="https://drive.google.com/uc?export=view&id=1QAHFh_OvZyUbqaZIHgVCSaA07kihC6Kz" alt="Nordic Homes" onerror="this.style.display='none'"/>
+    </div>
+    <hr class="divider"/>
+
+    <div class="section">1. Basic Information</div>
+    <div class="row"><span class="lbl">Project</span><span class="val">${proj().label}</span></div>
+    <div class="row"><span class="lbl">Module No.</span><span class="val">${data.module}</span></div>
+    <div class="row"><span class="lbl">Date</span><span class="val">${(data.date||'').split('-').reverse().join('.')}</span></div>
+    ${data.system?`<div class="row"><span class="lbl">System</span><span class="val">${data.system}</span></div>`:''}
+
+    ${measHtml}
+
+    <div class="section">3. Personnel</div>
+    <div class="personnel-grid">
+      <div class="person-card"><div class="person-role">Performed by</div><div class="person-name">${data.performed_by||'—'}</div></div>
+      <div class="person-card"><div class="person-role">QC Representative</div><div class="person-name">${data.qc_representative}</div></div>
+    </div>
+    <div class="sig-line"></div>
+    <div class="sig-label">QC Representative signature</div>
+
+    ${data.notes?`<div class="section">Notes</div><p style="font-size:11px;color:#333">${data.notes}</p>`:''}
+
+    <div class="result-block">
+      <div class="result-icon">${resIcon}</div>
+      <div class="result-text">
+        <div class="result-word">${res||'—'}</div>
+        <div class="result-label">Test result — ${tt.label}</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Nordic Homes — ${tt.label}</span>
+      <span>${pdfName}</span>
+    </div>
+  </div>
+  ${annexHtml}
   </body></html>`;
 
+  // ── Open + trigger print with suggested filename ───────────────────────────
   const win=window.open('','_blank');
-  win.document.write(html);
+  win.document.write(docHtml);
   win.document.close();
   win.focus();
-  setTimeout(()=>win.print(),500);
+  // Set title so browser uses it as default save name
+  win.document.title=pdfName;
+  setTimeout(()=>win.print(),800);
 }
 </script>
 </body>
