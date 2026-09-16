@@ -1027,12 +1027,15 @@ async function handlePhotoInput(e){
     const driveId=data.id;
     // Store in context
     storePhotoId(currentPhotoSlot,driveId);
-    // Remove uploading overlay, add remove btn
+    // Remove uploading overlay
     const slot=document.getElementById('slot-'+currentPhotoSlot);
     const upl=document.getElementById('upl-'+currentPhotoSlot);
     if(upl)upl.style.display='none';
     if(slot){slot.setAttribute('data-drive-id',driveId);slot.onclick=null;}
-    setStatus('Photo uploaded ✓');
+    // Auto-save so photo IDs are never lost
+    const autoData=collectFormData();
+    await _saveData(autoData);
+    setStatus('Photo saved ✓');
     updateDiffs();
   }catch(err){setStatus('Photo upload error: '+err.message);}
 }
@@ -1052,7 +1055,7 @@ function storePhotoId(slotId,driveId){
     if(slotId==='ph-sewer-end')d.end_photo_id=driveId;
     if(slotId==='ph-sewer-overview')d.overview_photo_id=driveId;
   }
-  if(t==='QC-5.0'){
+  if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
     if(slotId==='ph-hot-start'){if(!d.hot)d.hot={};d.hot.start_photo_id=driveId;}
     if(slotId==='ph-hot-end'){if(!d.hot)d.hot={};d.hot.end_photo_id=driveId;}
     if(slotId==='ph-cold-start'){if(!d.cold)d.cold={};d.cold.start_photo_id=driveId;}
