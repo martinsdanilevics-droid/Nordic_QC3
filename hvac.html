@@ -206,6 +206,9 @@ const TEST_TYPES={
 
 const PERFORMERS=['Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
 const QC_REP='Mārtiņš Danilevičs';
+const ADMIN_EMAIL='martins.danilevics@nordichomes.lv';
+let currentUserEmail='';
+function isAdmin(){return currentUserEmail===ADMIN_EMAIL;}
 
 // Scope defaults by test type
 function currentScopeDefault(){
@@ -419,8 +422,19 @@ async function setupFoldersAndLoad(){
     folderCache={};
     const root=await ensureFolder('root','Nordic_QC3');
     rootFolderId=root.id;
+    // Fetch user identity
+    try{
+      const me=await graphRequest('/me?$select=mail,userPrincipalName');
+      currentUserEmail=(me.mail||me.userPrincipalName||'').toLowerCase();
+    }catch(e){currentUserEmail='';}
+    updateRoleUI();
     await loadProjectTests();
   }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
+}
+
+function updateRoleUI(){
+  const roleLabel=isAdmin()?'👑 Admin':'👷 Technician';
+  document.getElementById('connect-btn').title=currentUserEmail+' — '+roleLabel;
 }
 
 async function getModuleHVACFolder(modName,testTypeKey){
@@ -523,7 +537,11 @@ function renderMatrix(){
         const realEntries=entries.filter(([k,v])=>v&&v.data&&v.data.result!=='N/A');
         const hasNA=entries.some(([k,v])=>v&&v.data&&v.data.result==='N/A');
         if(hasNA&&realEntries.length===0){
-          html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
+          if(isAdmin()){
+            html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
+          } else {
+            html+=`<td class="cell-na-set" title="Not applicable">N/A</td>`;
+          }
         } else if(realEntries.length>0){
           let inner='';
           for(const [key,entry] of realEntries){
@@ -538,8 +556,9 @@ function renderMatrix(){
           inner+=`<div style="padding-top:3px"><button class="cell-btn" onclick="startTest('${mod}','${tk}')" style="font-size:10px;padding:2px 6px">+ Add</button></div>`;
           html+=`<td style="padding:4px">${inner}</td>`;
         } else {
+          const naBtn=isAdmin()?`<button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>`:'';
           html+=`<td style="white-space:nowrap">
-            <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button><button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>
+            <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button>${naBtn}
           </td>`;
         }
       }
@@ -616,6 +635,13 @@ function renderTestForm(){
   else if(tt.type==='water'){html+=renderWaterForm(d);}
 
   document.getElementById('test-form-content').innerHTML=html;
+  // Auto-set today's start time if new test and no data yet
+  if(!data){
+    const now=new Date();
+    const t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+    const startFields=['f-p1-ts','f-start-time'];
+    startFields.forEach(id=>{const el=document.getElementById(id);if(el&&!el.value)el.value=t;});
+  }
   // After render, set up photo slots
   setupPhotoSlots();
   updateDiffs();
@@ -803,7 +829,7 @@ function renderPersonnelAndResult(d){
     <button class="btn-primary" onclick="saveTest()">💾 Save</button>
     <button class="btn-secondary" onclick="exportPDF()">📄 Export PDF</button>
     <button class="btn-pending" onclick="saveAsPending()">⏳ Save as Pending</button>
-    <button class="btn-danger" onclick="deleteTest()">🗑 Delete Test</button>
+    ${isAdmin()?`<button class="btn-danger" onclick="deleteTest()">🗑 Delete Test</button>`:''}
   </div>`;
 }
 
@@ -892,6 +918,21 @@ async function handlePhotoInput(e){
     }
   };
   reader.readAsDataURL(file);
+  // Auto-set time from photo upload moment
+  const now=new Date();
+  const timeStr=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  const slotTimeMap={
+    'ph-p1-start':'f-p1-ts','ph-p1-end':'f-p1-te',
+    'ph-p2-start':'f-p2-ts','ph-p2-end':'f-p2-te',
+    'ph-sewer-start':'f-start-time','ph-sewer-end':'f-end-time',
+    'ph-hot-start':'f-start-time','ph-hot-end':'f-end-time',
+    'ph-cold-start':'f-start-time','ph-cold-end':'f-end-time'
+  };
+  const timeFieldId=slotTimeMap[currentPhotoSlot];
+  if(timeFieldId){
+    const tf=document.getElementById(timeFieldId);
+    if(tf&&!tf.value)tf.value=timeStr; // only set if empty
+  }
   // Upload
   try{
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
