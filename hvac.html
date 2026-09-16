@@ -361,7 +361,8 @@ async function graphRequest(path,options={}){
   if(res.status===204)return{};
   const ct=res.headers.get('content-type')||'';
   if(ct.includes('json'))return res.json();
-  return res;
+  // Return raw text for file content downloads
+  return res.text();
 }
 
 function updateConnectBtn(){
@@ -539,9 +540,8 @@ async function loadProjectTests(){
 
     for(const file of files){
       try{
-        const content=await graphRequest(`/me/drive/items/${file.id}/content`);
-        const text=await content.text();
-        const data=JSON.parse(text);
+        const text=await graphRequest(`/me/drive/items/${file.id}/content`);
+        const data=JSON.parse(typeof text==='string'?text:JSON.stringify(text));
         const mod=data.module;
         const tk=data.test_type;
         if(!mod||!tk||!fresh[mod])continue;
