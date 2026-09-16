@@ -149,6 +149,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
         <option value="GER_CS">GER CS Chimney Street</option>
       </select>
       <button class="btn-connect" id="connect-btn" onclick="handleConnect()">⬤ Connect OneDrive</button>
+      <button class="btn-connect" onclick="forceRefresh()" title="Force reload from OneDrive" style="padding:6px 10px;font-size:16px">🔄</button>
     </div>
   </div>
 </div>
@@ -250,6 +251,13 @@ function onProjectChange(){
   folderCache={};
   showTab('overview');
   if(msConnected)loadProjectTests();
+}
+
+// Manual refresh button
+async function forceRefresh(){
+  clearCache();
+  loadingTests=false;
+  await loadProjectTests();
 }
 
 // ========== AUTH (PKCE — same as QC3) ==========
@@ -447,56 +455,91 @@ async function getModuleHVACFolder(modName,testTypeKey){
 
 // ========== LOAD ALL TESTS FOR PROJECT ==========
 let loadingTests=false;
+// ── CACHE HELPERS ────────────────────────────────────────────────────────────
+function cacheKey(){return `hvac_tests_${currentProject}`;}
+
+function saveToCache(){
+  try{
+    const payload={ts:Date.now(),data:testsData[currentProject]};
+    localStorage.setItem(cacheKey(),JSON.stringify(payload));
+  }catch(e){console.warn('Cache write error',e);}
+}
+
+function loadFromCache(){
+  try{
+    const raw=localStorage.getItem(cacheKey());
+    if(!raw)return false;
+    const payload=JSON.parse(raw);
+    // Use cache up to 10 min old
+    if(Date.now()-payload.ts>600000)return false;
+    testsData[currentProject]=payload.data||{};
+    return true;
+  }catch(e){return false;}
+}
+
+function clearCache(proj){
+  try{localStorage.removeItem(`hvac_tests_${proj||currentProject}`);}catch(e){}
+}
+
+// ── FAST LOAD: search for all JSON files under project folder in one call ─────
 async function loadProjectTests(){
   if(!rootFolderId)return;
   if(loadingTests)return;
   loadingTests=true;
-  setStatus('Loading test data...');
-  // Reset project data
-  testsData[currentProject]={};
-  const mods=proj().modules;
-  const projFolder=await ensureFolder(rootFolderId,proj().folder);
-  for(const mod of mods){
-    testsData[currentProject][mod]={};
-    // Find module folder if it exists (don't create)
-    const modFolderSearch=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${encodeURIComponent(mod)}'&$select=id,name`);
-    const modFolder=(modFolderSearch.value||[]).find(f=>f.name===mod);
-    if(!modFolder)continue;
-    // Find HVAC Tests folder
-    const hvacName=`${mod} HVAC Tests`;
-    const hvacSearch=await graphRequest(`/me/drive/items/${modFolder.id}/children?$filter=name eq '${encodeURIComponent(hvacName)}'&$select=id,name`);
-    const hvacFolder=(hvacSearch.value||[]).find(f=>f.name===hvacName);
-    if(!hvacFolder)continue;
-    // List test type subfolders
-    const subRes=await graphRequest(`/me/drive/items/${hvacFolder.id}/children?$select=id,name`);
-    const subFolders=(subRes.value||[]).filter(f=>f.name&&!f.name.startsWith('_'));
-    for(const subFolder of subFolders){
-      // Match folder name to test type key
-      const tk=Object.keys(TEST_TYPES).find(k=>TEST_TYPES[k].folder===subFolder.name);
-      if(!tk)continue;
-      // List JSON files in this folder
-      const filesRes=await graphRequest(`/me/drive/items/${subFolder.id}/children?$select=id,name&$top=100`);
-      const files=(filesRes.value||[]).filter(f=>f.name&&f.name.endsWith('.json')&&!f.name.startsWith('_'));
-      files.sort((a,b)=>a.name.localeCompare(b.name));
-      for(const file of files){
-        try{
-          const content=await graphRequest(`/me/drive/items/${file.id}/content`);
-          const text=await content.text();
-          const data=JSON.parse(text);
-          const sysNo=data.system_no||'';
-          const key=tk+'|'+sysNo;
-          testsData[currentProject][mod][key]={fileId:file.id,fileName:file.name,data};
-          // Cache the folder id for later saves
-          folderCache[`${projFolder.id}/${mod}`]=modFolder;
-          folderCache[`${modFolder.id}/${hvacName}`]=hvacFolder;
-          folderCache[`${hvacFolder.id}/${TEST_TYPES[tk].folder}`]=subFolder;
-        }catch(e){console.warn('Could not load',file.name,e);}
-      }
+
+  // Show cached data immediately
+  const hadCache=loadFromCache();
+  if(hadCache){
+    setStatus('Loading... (cached)');
+    renderMatrix();
+  } else {
+    setStatus('Loading test data...');
+    testsData[currentProject]={};
+    // Init empty module entries
+    proj().modules.forEach(m=>{testsData[currentProject][m]={};});
+    renderMatrix();
+  }
+
+  // Background refresh from OneDrive
+  try{
+    const projFolder=await ensureFolder(rootFolderId,proj().folder);
+    // Search ALL json files under project folder recursively
+    const searchRes=await graphRequest(
+      `/me/drive/items/${projFolder.id}/search(q='.json')?$select=id,name,parentReference&$top=200`
+    );
+    const files=(searchRes.value||[]).filter(f=>
+      f.name&&f.name.endsWith('.json')&&
+      !f.name.startsWith('_')&&
+      !f.parentReference?.path?.includes('_Deleted')
+    );
+
+    // Reset and re-populate
+    const fresh={};
+    proj().modules.forEach(m=>{fresh[m]={};});
+
+    for(const file of files){
+      try{
+        const content=await graphRequest(`/me/drive/items/${file.id}/content`);
+        const text=await content.text();
+        const data=JSON.parse(text);
+        const mod=data.module;
+        const tk=data.test_type;
+        if(!mod||!tk||!fresh[mod])continue;
+        const sysNo=data.system_no||'';
+        const key=tk+'|'+sysNo;
+        fresh[mod][key]={fileId:file.id,fileName:file.name,data};
+      }catch(e){console.warn('Could not load',file.name,e);}
     }
+
+    testsData[currentProject]=fresh;
+    saveToCache();
+    setStatus('Loaded ✓');
+    renderMatrix();
+  }catch(e){
+    setStatus(hadCache?'Using cached data (offline?)':'Load error: '+e.message);
+    console.error(e);
   }
   loadingTests=false;
-  setStatus('Loaded ✓');
-  renderMatrix();
 }
 
 // ========== OVERVIEW MATRIX ==========
@@ -583,6 +626,7 @@ async function setNA(mod,tk){
     if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
     const naKey=tk+'|N/A';
     testsData[currentProject][mod][naKey]={fileId:res.id,fileName:fname,data};
+    saveToCache();
     setStatus('Marked as N/A ✓');
     renderMatrix();
   }catch(e){setStatus('Error: '+e.message);}
@@ -597,6 +641,7 @@ async function clearNA(mod,tk){
       await graphRequest(`/me/drive/items/${entry.fileId}`,{method:'DELETE'});
     }
     delete testsData[currentProject][mod][naKey];
+    saveToCache();
     setStatus('N/A removed ✓');
     renderMatrix();
   }catch(e){setStatus('Error: '+e.message);}
@@ -635,7 +680,7 @@ function renderTestForm(){
   else if(tt.type==='water'){html+=renderWaterForm(d);}
 
   document.getElementById('test-form-content').innerHTML=html;
-  // Set datalist fields via JS (value attr doesn't work reliably for datalist)
+  // Set select fields via JS
   const sysnoEl=document.getElementById('f-sysno');
   if(sysnoEl)sysnoEl.value=currentTestCtx.data?.system_no||'';
   // Auto-set today's start time if new test and no data yet
@@ -662,8 +707,12 @@ function renderHeatingForm(d,testType){
       <div class="form-group"><label>System</label>
         <input type="text" id="f-system" value="${d.system||currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System'}"/></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
-        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
+        <select id="f-sysno">
+          <option value="">— Select —</option>
+          <option value="System No.1">System No.1</option>
+          <option value="System No.2">System No.2</option>
+          <option value="N/A">N/A (single system)</option>
+        </select></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
     </div>
   </div>
@@ -721,8 +770,12 @@ function renderSewerForm(d){
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
-        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
+        <select id="f-sysno">
+          <option value="">— Select —</option>
+          <option value="System No.1">System No.1</option>
+          <option value="System No.2">System No.2</option>
+          <option value="N/A">N/A (single system)</option>
+        </select></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
       <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
@@ -767,8 +820,12 @@ function renderWaterForm(d){
           <option value="Full System with Water Mixers"/>
         </datalist></div>
       <div class="form-group"><label>System No.</label>
-        <input list="sysno-list" id="f-sysno" placeholder="Select or type..."/>
-        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
+        <select id="f-sysno">
+          <option value="">— Select —</option>
+          <option value="System No.1">System No.1</option>
+          <option value="System No.2">System No.2</option>
+          <option value="N/A">N/A (single system)</option>
+        </select></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
       <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
@@ -1172,6 +1229,7 @@ async function deleteTest(){
     if(testsData[currentProject]?.[currentTestCtx.module]){
       delete testsData[currentProject][currentTestCtx.module][key];
     }
+    clearCache();
     setStatus('Moved to _Deleted ✓');
     showTab('overview');
     renderMatrix();
@@ -1211,6 +1269,7 @@ async function _saveData(data){
     const sKey=currentTestCtx.testType+'|'+(data.system_no||'');
     currentTestCtx.stateKey=sKey;
     testsData[currentProject][currentTestCtx.module][sKey]={fileId,fileName:fname,data};
+    saveToCache();
     setStatus('Saved ✓ '+new Date().toLocaleTimeString());
     renderMatrix();
   }catch(e){setStatus('Save error: '+e.message);console.error(e);}
