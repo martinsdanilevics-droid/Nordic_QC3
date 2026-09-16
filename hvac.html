@@ -46,7 +46,10 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .cell-empty{color:#bbb;}
 .cell-na{color:#bbb;font-style:italic;}
 .cell-btn{background:none;border:1px solid #2d5a3d;color:#2d5a3d;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;}
-.cell-btn:hover{background:#2d5a3d;color:#fff;}
+.cell-btn-na{background:none;border:1px solid #bbb;color:#999;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;margin-left:4px;}
+.cell-btn-na:hover{background:#f5f5f5;color:#666;}
+.cell-na-set{color:#aaa;font-style:italic;font-size:12px;cursor:pointer;}
+.cell-na-set:hover{color:#666;}
 
 /* GROUP HEADER ROW */
 .matrix-table tr.group-row td{background:#e8f5ec;font-weight:700;font-size:12px;color:#1a3a2a;padding:6px 12px;letter-spacing:0.3px;}
@@ -190,17 +193,22 @@ const PROJECTS={
 };
 
 const TEST_TYPES={
-  'QC-4.0':{label:'QC-4.0 Heating Pneumatic',folder:'QC-4.0 Heating Pneumatic',type:'heating'},
+  'QC-4.0':{label:'QC-4.0 Underfloor Heating Pneumatic',folder:'QC-4.0 Underfloor Heating Pneumatic',type:'heating'},
   'QC-4.1':{label:'QC-4.1 Radiator Heating Pneumatic',folder:'QC-4.1 Radiator Heating Pneumatic',type:'heating'},
   'QC-4.2':{label:'QC-4.2 Sewer Hydraulic',folder:'QC-4.2 Sewer Hydraulic',type:'sewer'},
-  'QC-5.0':{label:'QC-5.0 Water Supply Pneumatic',folder:'QC-5.0 Water Supply Pneumatic',type:'water'}
+  'QC-5.0':{label:'QC-5.0 Water Supply — Concealed Wall Piping',folder:'QC-5.0 Water Supply Concealed Wall Piping',type:'water'},
+  'QC-5.1':{label:'QC-5.1 Water Supply — Collector Piping',folder:'QC-5.1 Water Supply Collector Piping',type:'water'},
+  'QC-5.2':{label:'QC-5.2 Water Supply — Full System',folder:'QC-5.2 Water Supply Full System',type:'water'}
 };
 
 const PERFORMERS=['Mārtiņš Danilevičs','Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
 const QC_REP='Mārtiņš Danilevičs';
 
-const HEATING_SCOPES=['Underfloor Heating System','Radiator Heating System'];
-const WATER_SCOPES=['Full System with water mixers','Collector Piping','Concealed Wall Piping'];
+// Scope defaults by test type
+function currentScopeDefault(){
+  const defaults={'QC-5.0':'Concealed Wall Piping','QC-5.1':'Collector Piping','QC-5.2':'Full System with Water Mixers'};
+  return defaults[currentTestCtx?.testType]||'';
+}
 
 // ========== STATE ==========
 let msToken=null;
@@ -233,6 +241,7 @@ function showTab(tab){
 // ========== PROJECT CHANGE ==========
 function onProjectChange(){
   currentProject=document.getElementById('project-sel').value;
+  folderCache={};
   showTab('overview');
   if(msConnected)loadProjectTests();
 }
@@ -404,6 +413,7 @@ async function ensureFolder(parentId,name){
 async function setupFoldersAndLoad(){
   setStatus('Setting up OneDrive...');
   try{
+    folderCache={};
     const root=await ensureFolder('root','Nordic_QC3');
     rootFolderId=root.id;
     await loadProjectTests();
@@ -419,8 +429,11 @@ async function getModuleHVACFolder(modName,testTypeKey){
 }
 
 // ========== LOAD ALL TESTS FOR PROJECT ==========
+let loadingTests=false;
 async function loadProjectTests(){
   if(!rootFolderId)return;
+  if(loadingTests)return;
+  loadingTests=true;
   setStatus('Loading test data...');
   if(!testsData[currentProject])testsData[currentProject]={};
   const mods=proj().modules;
@@ -447,6 +460,7 @@ async function loadProjectTests(){
       }
     }
   }
+  loadingTests=false;
   setStatus('Loaded ✓');
   renderMatrix();
 }
@@ -461,8 +475,17 @@ function renderMatrix(){
   let html=`<table class="matrix-table">
     <thead><tr>
       <th class="mod-col">Module</th>`;
+  const shortNames={
+    'QC-4.0':'Underfloor\nHeating',
+    'QC-4.1':'Radiator\nHeating',
+    'QC-4.2':'Sewer\nHydraulic',
+    'QC-5.0':'Water\nConcealed Wall',
+    'QC-5.1':'Water\nCollector',
+    'QC-5.2':'Water\nFull System'
+  };
   for(const tk of tks){
-    html+=`<th>${tk}<br><span style="font-weight:400;font-size:10px;opacity:0.85">${TEST_TYPES[tk].folder.replace(tk+' ','')}</span></th>`;
+    const sub=(shortNames[tk]||'').replace('\\n','<br>');
+    html+=`<th>${tk}<br><span style="font-weight:400;font-size:10px;opacity:0.85">${sub}</span></th>`;
   }
   html+=`</tr></thead><tbody>`;
 
@@ -472,26 +495,61 @@ function renderMatrix(){
       const entry=(pd[mod]||{})[tk];
       if(!msConnected){
         html+=`<td class="cell-empty">—</td>`;
+      } else if(entry&&entry.data&&entry.data.result==='N/A'){
+        html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
       } else if(entry&&entry.data){
         const d=entry.data;
         const dateStr=d.date||'';
         const res=d.result||'';
         const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':'#999';
+        const sysNo=d.system_no?` · ${d.system_no}`:'';
         html+=`<td class="cell-done" onclick="openTest('${mod}','${tk}')" style="color:${color}" title="Click to view/edit">
-          ${dateStr}<br><span style="font-size:10px">${res}</span>
+          ${dateStr}${sysNo}<br><span style="font-size:10px">${res}</span>
         </td>`;
       } else {
-        html+=`<td><button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button></td>`;
+        html+=`<td style="white-space:nowrap">
+          <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button><button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>
+        </td>`;
       }
     }
     html+=`</tr>`;
   }
   html+=`</tbody></table>`;
-  html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Click any date cell to view or edit a test. Click "+ Add" to record a new test.</p>`;
+  html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Click any date cell to view or edit. "+ Add" to record a new test. "N/A" if test is not applicable.</p>`;
   wrap.innerHTML=html;
 }
 
-// ========== START / OPEN TEST ==========
+// ========== N/A FUNCTIONS ==========
+async function setNA(mod,tk){
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  if(!confirm(`Mark ${mod} — ${tk} as N/A?`))return;
+  const data={test_type:tk,project:currentProject,module:mod,result:'N/A',date:todayISO(),saved_at:new Date().toISOString()};
+  try{
+    const folder=await getModuleHVACFolder(mod,tk);
+    const fname=`${mod.replace(/[ -]/g,'')}_${tk}_NA.json`;
+    const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(!testsData[currentProject])testsData[currentProject]={};
+    if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
+    testsData[currentProject][mod][tk]={fileId:res.id,fileName:fname,data};
+    setStatus('Marked as N/A ✓');
+    renderMatrix();
+  }catch(e){setStatus('Error: '+e.message);}
+}
+
+async function clearNA(mod,tk){
+  if(!confirm(`Remove N/A for ${mod} — ${tk}?`))return;
+  try{
+    const entry=(testsData[currentProject]||{})[mod]?.[tk];
+    if(entry?.fileId){
+      await graphRequest(`/me/drive/items/${entry.fileId}`,{method:'DELETE'});
+    }
+    testsData[currentProject][mod][tk]=null;
+    setStatus('N/A removed ✓');
+    renderMatrix();
+  }catch(e){setStatus('Error: '+e.message);}
+}
+
+
 function startTest(mod,testType){
   currentTestCtx={module:mod,testType,data:null};
   renderTestForm();
@@ -526,7 +584,6 @@ function renderTestForm(){
 
 // ---- HEATING FORM (QC-4.0 / QC-4.1) ----
 function renderHeatingForm(d,testType){
-  const scopeOpts=HEATING_SCOPES.map(s=>`<option ${d.system_scope===s?'selected':''}>${s}</option>`).join('');
   const perfOpts=PERFORMERS.map(p=>`<option ${d.performed_by===p?'selected':''}>${p}</option>`).join('');
   return `
   <div class="form-card">
@@ -534,8 +591,11 @@ function renderHeatingForm(d,testType){
     <div class="form-grid">
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
-      <div class="form-group"><label>System Scope</label>
-        <select id="f-scope"><option value="">— Select —</option>${scopeOpts}</select></div>
+      <div class="form-group"><label>System</label>
+        <input type="text" value="${currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System'}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>System No.</label>
+        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
     </div>
   </div>
@@ -592,6 +652,9 @@ function renderSewerForm(d){
     <div class="form-grid">
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
+      <div class="form-group"><label>System No.</label>
+        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
       <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
@@ -622,7 +685,6 @@ function renderSewerForm(d){
 
 // ---- WATER FORM (QC-5.0) ----
 function renderWaterForm(d){
-  const scopeOpts=WATER_SCOPES.map(s=>`<option ${d.system_scope===s?'selected':''}>${s}</option>`).join('');
   return `
   <div class="form-card">
     <h3>1. Basic Information</h3>
@@ -630,7 +692,15 @@ function renderWaterForm(d){
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>System Scope</label>
-        <select id="f-scope"><option value="">— Select —</option>${scopeOpts}</select></div>
+        <input list="scope-list" id="f-scope" value="${d.system_scope||currentScopeDefault()}" placeholder="Select or type..."/>
+        <datalist id="scope-list">
+          <option value="Concealed Wall Piping"/>
+          <option value="Collector Piping"/>
+          <option value="Full System with Water Mixers"/>
+        </datalist></div>
+      <div class="form-group"><label>System No.</label>
+        <input list="sysno-list" id="f-sysno" value="${d.system_no||''}" placeholder="Select or type..."/>
+        <datalist id="sysno-list"><option value="System No.1"/><option value="System No.2"/></datalist></div>
       <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${d.date||todayISO()}"/></div>
       <div class="form-group"><label>Start Time</label><input type="time" id="f-start-time" value="${d.start_time||''}"/></div>
       <div class="form-group"><label>End Time</label><input type="time" id="f-end-time" value="${d.end_time||''}"/></div>
@@ -926,7 +996,7 @@ function collectFormData(){
     const p2e=parseFloat(document.getElementById('f-p2-pe').value);
     const d1=isNaN(p1s)||isNaN(p1e)?null:+(p1e-p1s).toFixed(2);
     const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
-    base.system_scope=document.getElementById('f-scope')?.value||'';
+    base.system_no=document.getElementById('f-sysno')?.value||'';
     base.visual_inspection=document.getElementById('f-vi')?.checked||false;
     base.part_i={start_time:document.getElementById('f-p1-ts').value,end_time:document.getElementById('f-p1-te').value,pressure_start:p1s,pressure_end:p1e,difference:d1,start_photo_id:existing.part_i?.start_photo_id||null,end_photo_id:existing.part_i?.end_photo_id||null};
     base.part_ii={start_time:document.getElementById('f-p2-ts').value,end_time:document.getElementById('f-p2-te').value,pressure_start:p2s,pressure_end:p2e,difference:d2,start_photo_id:existing.part_ii?.start_photo_id||null,end_photo_id:existing.part_ii?.end_photo_id||null};
@@ -936,6 +1006,7 @@ function collectFormData(){
     const ws=parseFloat(document.getElementById('f-wl-start').value);
     const we=parseFloat(document.getElementById('f-wl-end').value);
     const diff=isNaN(ws)||isNaN(we)?null:+(we-ws).toFixed(1);
+    base.system_no=document.getElementById('f-sysno')?.value||'';
     base.start_time=document.getElementById('f-start-time')?.value||'';
     base.end_time=document.getElementById('f-end-time')?.value||'';
     base.water_level_start=ws;base.water_level_end=we;base.difference=diff;
@@ -952,6 +1023,7 @@ function collectFormData(){
     const dh=isNaN(hs)||isNaN(he)?null:+(he-hs).toFixed(2);
     const dc=isNaN(cs)||isNaN(ce)?null:+(ce-cs).toFixed(2);
     base.system_scope=document.getElementById('f-scope')?.value||'';
+    base.system_no=document.getElementById('f-sysno')?.value||'';
     base.start_time=document.getElementById('f-start-time')?.value||'';
     base.end_time=document.getElementById('f-end-time')?.value||'';
     base.hot={pressure_start:hs,pressure_end:he,difference:dh,start_photo_id:existing.hot?.start_photo_id||null,end_photo_id:existing.hot?.end_photo_id||null};
