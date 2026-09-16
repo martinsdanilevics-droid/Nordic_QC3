@@ -237,86 +237,66 @@ function onProjectChange(){
   if(msConnected)loadProjectTests();
 }
 
-// ========== AUTH ==========
+// ========== AUTH (PKCE — same as QC3) ==========
+async function generateCodeVerifier(){
+  const arr=new Uint8Array(32);
+  crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+async function generateCodeChallenge(verifier){
+  const data=new TextEncoder().encode(verifier);
+  const digest=await crypto.subtle.digest('SHA-256',data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
 async function handleConnect(){
   if(msConnected){setStatus('Already connected.');return;}
-  const rt=localStorage.getItem('hvac_ms_refresh_token');
+  // Try silent restore first
   const expiry=parseInt(localStorage.getItem('hvac_ms_token_expiry')||'0');
+  const rt=localStorage.getItem('hvac_ms_refresh_token');
   if(rt&&Date.now()<expiry-30000){
-    msToken=localStorage.getItem('hvac_ms_token');
-    msTokenExpiry=expiry;
-    msConnected=true;
-    updateConnectBtn();
+    msConnected=true;updateConnectBtn();
     setStatus('Restoring OneDrive connection...');
-    await setupFoldersAndLoad();
-    return;
+    await setupFoldersAndLoad();return;
   }
   if(rt){
-    try{await refreshToken();msConnected=true;updateConnectBtn();await setupFoldersAndLoad();return;}
+    try{const d=await refreshMsToken();saveMsTokens(d);msConnected=true;updateConnectBtn();await setupFoldersAndLoad();return;}
     catch(e){localStorage.removeItem('hvac_ms_refresh_token');}
   }
-  // Popup login
-  await loginWithPopup();
-}
-
-async function loginWithPopup(){
-  const state=Math.random().toString(36).slice(2);
+  // PKCE login
+  const verifier=await generateCodeVerifier();
+  const challenge=await generateCodeChallenge(verifier);
+  sessionStorage.setItem('hvac_pkce_verifier',verifier);
   const params=new URLSearchParams({
     client_id:MS_CLIENT_ID,
-    response_type:'token',
+    response_type:'code',
     redirect_uri:MS_REDIRECT_URI,
-    scope:MS_SCOPES.join(' '),
-    response_mode:'fragment',
-    state,
-    nonce:Math.random().toString(36).slice(2),
-    prompt:'select_account'
+    scope:MS_SCOPES.join(' ')+' offline_access',
+    code_challenge:challenge,
+    code_challenge_method:'S256',
+    response_mode:'query'
   });
-  const authUrl=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
-  const popup=window.open(authUrl,'ms_login','width=520,height=620,left=200,top=100');
-  if(!popup){setStatus('Popup blocked! Allow popups for this site.');return;}
-  // Poll for redirect
-  await new Promise((resolve,reject)=>{
-    const timer=setInterval(()=>{
-      try{
-        if(popup.closed){clearInterval(timer);reject(new Error('Login cancelled'));return;}
-        const hash=popup.location.hash;
-        if(hash&&hash.includes('access_token')){
-          clearInterval(timer);
-          popup.close();
-          const p=new URLSearchParams(hash.slice(1));
-          const token=p.get('access_token');
-          const expiresIn=parseInt(p.get('expires_in')||'3600');
-          msToken=token;
-          msTokenExpiry=Date.now()+expiresIn*1000;
-          localStorage.setItem('hvac_ms_token',token);
-          localStorage.setItem('hvac_ms_token_expiry',String(msTokenExpiry));
-          resolve();
-        }
-      }catch(e){/* cross-origin, still loading */}
-    },300);
-    setTimeout(()=>{clearInterval(timer);popup.close();reject(new Error('Login timeout'));},120000);
-  });
-  msConnected=true;
-  updateConnectBtn();
-  setStatus('Connected! Loading data...');
-  await setupFoldersAndLoad();
+  window.location.href=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?${params}`;
 }
 
-async function exchangeCode(code){
+async function exchangeMsCode(code){
+  const verifier=sessionStorage.getItem('hvac_pkce_verifier');
+  if(!verifier)throw new Error('No PKCE verifier');
   const body=new URLSearchParams({
     client_id:MS_CLIENT_ID,
     grant_type:'authorization_code',
     code,
     redirect_uri:MS_REDIRECT_URI,
+    code_verifier:verifier,
     scope:MS_SCOPES.join(' ')+' offline_access'
   });
   const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
   const data=await res.json();
   if(data.error)throw new Error(data.error_description||data.error);
-  storeTokens(data);
+  return data;
 }
 
-async function refreshToken(){
+async function refreshMsToken(){
   const rt=localStorage.getItem('hvac_ms_refresh_token');
   if(!rt)throw new Error('No refresh token');
   const body=new URLSearchParams({
@@ -328,20 +308,20 @@ async function refreshToken(){
   const res=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body,headers:{'Content-Type':'application/x-www-form-urlencoded'}});
   const data=await res.json();
   if(data.error)throw new Error(data.error_description||data.error);
-  storeTokens(data);
+  return data;
 }
 
-function storeTokens(data){
+function saveMsTokens(data){
   msToken=data.access_token;
-  msTokenExpiry=Date.now()+(data.expires_in||3600)*1000;
-  localStorage.setItem('hvac_ms_token',msToken);
+  msTokenExpiry=Date.now()+(data.expires_in-300)*1000;
   localStorage.setItem('hvac_ms_token_expiry',String(msTokenExpiry));
   if(data.refresh_token)localStorage.setItem('hvac_ms_refresh_token',data.refresh_token);
 }
 
 async function ensureToken(){
-  if(msToken&&Date.now()<msTokenExpiry-30000)return msToken;
-  await refreshToken();
+  if(msToken&&Date.now()<msTokenExpiry)return msToken;
+  const data=await refreshMsToken();
+  saveMsTokens(data);
   return msToken;
 }
 
@@ -367,19 +347,41 @@ function updateConnectBtn(){
   btn.classList.toggle('connected',msConnected);
 }
 
-// ========== INIT (handle OAuth redirect) ==========
+// ========== INIT (handle OAuth redirect — PKCE) ==========
 (async()=>{
-  // Try silent restore from stored token
-  const token=localStorage.getItem('hvac_ms_token');
-  const expiry=parseInt(localStorage.getItem('hvac_ms_token_expiry')||'0');
-  if(token&&Date.now()<expiry-30000){
-    msToken=token;
-    msTokenExpiry=expiry;
-    msConnected=true;
-    updateConnectBtn();
-    setStatus('Restoring session...');
-    await setupFoldersAndLoad();
+  const url=new URL(window.location.href);
+  const code=url.searchParams.get('code');
+  if(code){
+    url.searchParams.delete('code');
+    url.searchParams.delete('state');
+    window.history.replaceState({},'',url.toString());
+    setStatus('Connecting to OneDrive...');
+    try{
+      const data=await exchangeMsCode(code);
+      saveMsTokens(data);
+      sessionStorage.removeItem('hvac_pkce_verifier');
+      msConnected=true;
+      updateConnectBtn();
+      await setupFoldersAndLoad();
+    }catch(e){setStatus('Auth error: '+e.message);}
     return;
+  }
+  // Try silent restore
+  const rt=localStorage.getItem('hvac_ms_refresh_token');
+  const expiry=parseInt(localStorage.getItem('hvac_ms_token_expiry')||'0');
+  if(rt){
+    try{
+      const data=await refreshMsToken();
+      saveMsTokens(data);
+      msConnected=true;
+      updateConnectBtn();
+      setStatus('Restoring session...');
+      await setupFoldersAndLoad();
+      return;
+    }catch(e){
+      localStorage.removeItem('hvac_ms_refresh_token');
+      setStatus('Please connect OneDrive.');
+    }
   }
   renderMatrix();
 })();
