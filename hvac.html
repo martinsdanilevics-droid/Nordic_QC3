@@ -259,6 +259,7 @@ async function handleConnect(){
   const params=new URLSearchParams({
     client_id:MS_CLIENT_ID,
     response_type:'code',
+    response_mode:'fragment',
     redirect_uri:MS_REDIRECT_URI,
     scope:MS_SCOPES.join(' ')+' offline_access',
     prompt:'select_account'
@@ -333,7 +334,7 @@ function updateConnectBtn(){
 
 // ========== INIT (handle OAuth redirect) ==========
 (async()=>{
-  const params=new URLSearchParams(window.location.search);
+  const params=new URLSearchParams(window.location.hash.slice(1)||window.location.search);
   const code=params.get('code');
   if(code){
     history.replaceState({},'',window.location.pathname);
