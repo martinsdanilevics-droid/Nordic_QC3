@@ -104,7 +104,10 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .btn-primary:hover{background:#1a3a2a;}
 .btn-secondary{padding:10px 22px;background:#fff;color:#2d5a3d;border:2px solid #2d5a3d;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
 .btn-secondary:hover{background:#f0f8f2;}
+.btn-pending{padding:10px 22px;background:#fff;color:#e65100;border:2px solid #e65100;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-pending:hover{background:#fff3e0;}
 .btn-danger{padding:10px 22px;background:#fff;color:#c62828;border:2px solid #c62828;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-danger:hover{background:#ffebee;}
 
 /* VISUAL INSP */
 .vi-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fdf9;border-radius:8px;border:1px solid #ddd;}
@@ -201,7 +204,7 @@ const TEST_TYPES={
   'QC-5.2':{label:'QC-5.2 Water Supply — Full System',folder:'QC-5.2 Water Supply Full System',type:'water'}
 };
 
-const PERFORMERS=['Mārtiņš Danilevičs','Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
+const PERFORMERS=['Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
 const QC_REP='Mārtiņš Danilevičs';
 
 // Scope defaults by test type
@@ -435,28 +438,45 @@ async function loadProjectTests(){
   if(loadingTests)return;
   loadingTests=true;
   setStatus('Loading test data...');
-  if(!testsData[currentProject])testsData[currentProject]={};
+  // Reset project data
+  testsData[currentProject]={};
   const mods=proj().modules;
+  const projFolder=await ensureFolder(rootFolderId,proj().folder);
   for(const mod of mods){
-    if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
-    for(const tk of Object.keys(TEST_TYPES)){
-      try{
-        const folder=await getModuleHVACFolder(mod,tk);
-        // List JSON files in folder
-        const res=await graphRequest(`/me/drive/items/${folder.id}/children?$select=id,name&$top=50`);
-        const files=(res.value||[]).filter(f=>f.name.endsWith('.json'));
-        if(files.length>0){
-          // Load most recent (last file alphabetically)
-          files.sort((a,b)=>b.name.localeCompare(a.name));
-          const content=await graphRequest(`/me/drive/items/${files[0].id}/content`);
+    testsData[currentProject][mod]={};
+    // Find module folder if it exists (don't create)
+    const modFolderSearch=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${encodeURIComponent(mod)}'&$select=id,name`);
+    const modFolder=(modFolderSearch.value||[]).find(f=>f.name===mod);
+    if(!modFolder)continue;
+    // Find HVAC Tests folder
+    const hvacName=`${mod} HVAC Tests`;
+    const hvacSearch=await graphRequest(`/me/drive/items/${modFolder.id}/children?$filter=name eq '${encodeURIComponent(hvacName)}'&$select=id,name`);
+    const hvacFolder=(hvacSearch.value||[]).find(f=>f.name===hvacName);
+    if(!hvacFolder)continue;
+    // List test type subfolders
+    const subRes=await graphRequest(`/me/drive/items/${hvacFolder.id}/children?$select=id,name`);
+    const subFolders=(subRes.value||[]).filter(f=>f.name&&!f.name.startsWith('_'));
+    for(const subFolder of subFolders){
+      // Match folder name to test type key
+      const tk=Object.keys(TEST_TYPES).find(k=>TEST_TYPES[k].folder===subFolder.name);
+      if(!tk)continue;
+      // List JSON files in this folder
+      const filesRes=await graphRequest(`/me/drive/items/${subFolder.id}/children?$select=id,name&$top=100`);
+      const files=(filesRes.value||[]).filter(f=>f.name&&f.name.endsWith('.json')&&!f.name.startsWith('_'));
+      files.sort((a,b)=>a.name.localeCompare(b.name));
+      for(const file of files){
+        try{
+          const content=await graphRequest(`/me/drive/items/${file.id}/content`);
           const text=await content.text();
           const data=JSON.parse(text);
-          testsData[currentProject][mod][tk]={fileId:files[0].id,fileName:files[0].name,data};
-        } else {
-          testsData[currentProject][mod][tk]=null;
-        }
-      }catch(e){
-        testsData[currentProject][mod][tk]=null;
+          const sysNo=data.system_no||'';
+          const key=tk+'|'+sysNo;
+          testsData[currentProject][mod][key]={fileId:file.id,fileName:file.name,data};
+          // Cache the folder id for later saves
+          folderCache[`${projFolder.id}/${mod}`]=modFolder;
+          folderCache[`${modFolder.id}/${hvacName}`]=hvacFolder;
+          folderCache[`${hvacFolder.id}/${TEST_TYPES[tk].folder}`]=subFolder;
+        }catch(e){console.warn('Could not load',file.name,e);}
       }
     }
   }
@@ -492,24 +512,36 @@ function renderMatrix(){
   for(const mod of mods){
     html+=`<tr><td class="mod-name">${mod}</td>`;
     for(const tk of tks){
-      const entry=(pd[mod]||{})[tk];
+      const modData=pd[mod]||{};
+      // Collect all entries for this testType (any system_no)
+      const entries=Object.entries(modData).filter(([k])=>k===tk+'|'||(k.startsWith(tk+'|')));
       if(!msConnected){
         html+=`<td class="cell-empty">—</td>`;
-      } else if(entry&&entry.data&&entry.data.result==='N/A'){
-        html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
-      } else if(entry&&entry.data){
-        const d=entry.data;
-        const dateStr=d.date||'';
-        const res=d.result||'';
-        const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':'#999';
-        const sysNo=d.system_no?` · ${d.system_no}`:'';
-        html+=`<td class="cell-done" onclick="openTest('${mod}','${tk}')" style="color:${color}" title="Click to view/edit">
-          ${dateStr}${sysNo}<br><span style="font-size:10px">${res}</span>
-        </td>`;
       } else {
-        html+=`<td style="white-space:nowrap">
-          <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button><button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>
-        </td>`;
+        // Check if N/A (key tk+'|')
+        const naEntry=modData[tk+'|N/A'];
+        const realEntries=entries.filter(([k,v])=>v&&v.data&&v.data.result!=='N/A');
+        const hasNA=entries.some(([k,v])=>v&&v.data&&v.data.result==='N/A');
+        if(hasNA&&realEntries.length===0){
+          html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
+        } else if(realEntries.length>0){
+          let inner='';
+          for(const [key,entry] of realEntries){
+            const d=entry.data;
+            const dateStr=d.date||'';
+            const res=d.result||'';
+            const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':res==='Pending'?'#e65100':'#999';
+            const sysNo=d.system_no?`<span style="font-size:10px;color:#888">${d.system_no}</span><br>`:'';
+            const sysNoEnc=encodeURIComponent(d.system_no||'');
+            inner+=`<div class="cell-done" onclick="openTestByKey('${mod}','${key}')" style="color:${color};border-bottom:1px solid #eee;padding:2px 0" title="Click to view/edit">${sysNo}${dateStr}<br><span style="font-size:10px">${res}</span></div>`;
+          }
+          inner+=`<div style="padding-top:3px"><button class="cell-btn" onclick="startTest('${mod}','${tk}')" style="font-size:10px;padding:2px 6px">+ Add</button></div>`;
+          html+=`<td style="padding:4px">${inner}</td>`;
+        } else {
+          html+=`<td style="white-space:nowrap">
+            <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button><button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>
+          </td>`;
+        }
       }
     }
     html+=`</tr>`;
@@ -530,7 +562,8 @@ async function setNA(mod,tk){
     const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     if(!testsData[currentProject])testsData[currentProject]={};
     if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
-    testsData[currentProject][mod][tk]={fileId:res.id,fileName:fname,data};
+    const naKey=tk+'|N/A';
+    testsData[currentProject][mod][naKey]={fileId:res.id,fileName:fname,data};
     setStatus('Marked as N/A ✓');
     renderMatrix();
   }catch(e){setStatus('Error: '+e.message);}
@@ -539,11 +572,12 @@ async function setNA(mod,tk){
 async function clearNA(mod,tk){
   if(!confirm(`Remove N/A for ${mod} — ${tk}?`))return;
   try{
-    const entry=(testsData[currentProject]||{})[mod]?.[tk];
+    const naKey=tk+'|N/A';
+    const entry=(testsData[currentProject]||{})[mod]?.[naKey];
     if(entry?.fileId){
       await graphRequest(`/me/drive/items/${entry.fileId}`,{method:'DELETE'});
     }
-    testsData[currentProject][mod][tk]=null;
+    delete testsData[currentProject][mod][naKey];
     setStatus('N/A removed ✓');
     renderMatrix();
   }catch(e){setStatus('Error: '+e.message);}
@@ -558,8 +592,13 @@ function startTest(mod,testType){
 }
 
 function openTest(mod,testType){
-  const entry=(testsData[currentProject]||{})[mod]?.[testType];
-  currentTestCtx={module:mod,testType,data:entry?entry.data:null,fileId:entry?entry.fileId:null,fileName:entry?entry.fileName:null};
+  openTestByKey(mod,testType+'|');
+}
+
+function openTestByKey(mod,key){
+  const tk=key.split('|')[0];
+  const entry=(testsData[currentProject]||{})[mod]?.[key];
+  currentTestCtx={module:mod,testType:tk,stateKey:key,data:entry?entry.data:null,fileId:entry?entry.fileId:null,fileName:entry?entry.fileName:null};
   renderTestForm();
   document.getElementById('tab-test').style.display='';
   showTab('test');
@@ -761,8 +800,10 @@ function renderPersonnelAndResult(d){
     <div class="form-group"><textarea id="f-notes" placeholder="Additional notes...">${d.notes||''}</textarea></div>
   </div>
   <div class="action-row">
-    <button class="btn-primary" onclick="saveTest()">💾 Save Test</button>
+    <button class="btn-primary" onclick="saveTest()">💾 Save</button>
     <button class="btn-secondary" onclick="exportPDF()">📄 Export PDF</button>
+    <button class="btn-pending" onclick="saveAsPending()">⏳ Save as Pending</button>
+    <button class="btn-danger" onclick="deleteTest()">🗑 Delete Test</button>
   </div>`;
 }
 
@@ -969,6 +1010,7 @@ function setResult(passed,failed){
   const bar=document.getElementById('result-bar');
   const lbl=document.getElementById('result-label');
   if(!bar||!lbl)return;
+  if(currentTestCtx?.data?.result==='Pending'){bar.className='result-bar pending';lbl.textContent='PENDING';return;}
   if(passed){bar.className='result-bar passed';lbl.textContent='PASSED';}
   else if(failed){bar.className='result-bar failed';lbl.textContent='FAILED';}
   else{bar.className='result-bar pending';lbl.textContent='—';}
@@ -1037,12 +1079,77 @@ function collectFormData(){
 async function saveTest(){
   if(!msConnected){alert('Connect OneDrive first.');return;}
   setStatus('Saving...');
+  if(currentTestCtx.data)currentTestCtx.data.result=null; // clear pending if was set
+  const data=collectFormData();
+  await _saveData(data);
+  updateDiffs();
+}
+
+// ========== PENDING + DELETE ==========
+async function saveAsPending(){
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  const data=collectFormData();
+  data.result='Pending';
+  if(!currentTestCtx.data)currentTestCtx.data={};
+  currentTestCtx.data.result='Pending';
+  await _saveData(data);
+  updateDiffs();
+}
+
+async function deleteTest(){
+  if(!currentTestCtx.fileId){showTab('overview');return;}
+  if(!confirm('Move this test to _Deleted folder? Photos will also be moved.'))return;
+  setStatus('Moving to _Deleted...');
   try{
-    const data=collectFormData();
+    // Get test folder
+    const testFolder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
+    // Create _Deleted subfolder inside test folder
+    const delFolder=await ensureFolder(testFolder.id,'_Deleted');
+    // Move JSON file
+    await graphRequest(`/me/drive/items/${currentTestCtx.fileId}`,{
+      method:'PATCH',
+      body:JSON.stringify({parentReference:{id:delFolder.id}})
+    });
+    // Move all photos referenced in test data
+    const d=currentTestCtx.data||{};
+    const photoIds=collectPhotoIds(d);
+    for(const pid of photoIds){
+      if(!pid)continue;
+      try{
+        await graphRequest(`/me/drive/items/${pid}`,{
+          method:'PATCH',
+          body:JSON.stringify({parentReference:{id:delFolder.id}})
+        });
+      }catch(e){console.warn('Could not move photo',pid,e);}
+    }
+    // Clear from state
+    const key=currentTestCtx.testType+'|'+(currentTestCtx.data?.system_no||'');
+    if(testsData[currentProject]?.[currentTestCtx.module]){
+      delete testsData[currentProject][currentTestCtx.module][key];
+    }
+    setStatus('Moved to _Deleted ✓');
+    showTab('overview');
+    renderMatrix();
+  }catch(e){setStatus('Delete error: '+e.message);console.error(e);}
+}
+
+function collectPhotoIds(d){
+  const ids=[];
+  if(d.part_i){ids.push(d.part_i.start_photo_id,d.part_i.end_photo_id);}
+  if(d.part_ii){ids.push(d.part_ii.start_photo_id,d.part_ii.end_photo_id);}
+  if(d.hot){ids.push(d.hot.start_photo_id,d.hot.end_photo_id);}
+  if(d.cold){ids.push(d.cold.start_photo_id,d.cold.end_photo_id);}
+  ids.push(d.start_photo_id,d.end_photo_id,d.overview_photo_id);
+  return ids.filter(Boolean);
+}
+
+async function _saveData(data){
+  try{
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
     const mod=currentTestCtx.module.replace(/[ -]/g,'');
     const dateStr=(data.date||todayISO()).replace(/-/g,'');
-    const fname=`${mod}_${currentTestCtx.testType}_${dateStr}.json`;
+    const sysNo=data.system_no?'_'+data.system_no.replace(/\s/g,''):'';
+    const fname=`${mod}_${currentTestCtx.testType}${sysNo}_${dateStr}.json`;
     const body=JSON.stringify(data,null,2);
     let fileId=currentTestCtx.fileId;
     if(fileId){
@@ -1056,14 +1163,35 @@ async function saveTest(){
     currentTestCtx.data=data;
     if(!testsData[currentProject])testsData[currentProject]={};
     if(!testsData[currentProject][currentTestCtx.module])testsData[currentProject][currentTestCtx.module]={};
-    testsData[currentProject][currentTestCtx.module][currentTestCtx.testType]={fileId,fileName:fname,data};
+    const sKey=currentTestCtx.testType+'|'+(data.system_no||'');
+    currentTestCtx.stateKey=sKey;
+    testsData[currentProject][currentTestCtx.module][sKey]={fileId,fileName:fname,data};
     setStatus('Saved ✓ '+new Date().toLocaleTimeString());
-    updateDiffs();
+    renderMatrix();
   }catch(e){setStatus('Save error: '+e.message);console.error(e);}
 }
 
 // ========== PDF EXPORT ==========
-function exportPDF(){
+async function getImageBase64(driveId){
+  if(!driveId)return null;
+  try{
+    const token=await ensureToken();
+    // Get download URL via thumbnail (large)
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{
+      headers:{Authorization:`Bearer ${token}`}
+    });
+    if(!res.ok)return null;
+    const blob=await res.blob();
+    return new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=e=>resolve(e.target.result);
+      reader.onerror=()=>resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  }catch(e){console.warn('Image load error',driveId,e);return null;}
+}
+
+async function exportPDF(){
   const data=collectFormData();
   const t=currentTestCtx.testType;
   const tt=TEST_TYPES[t];
@@ -1122,6 +1250,50 @@ function exportPDF(){
     <div class="row"><span class="lbl">Pressure End</span><span class="val">${data.cold?.pressure_end??''} bar</span></div>
     <div class="row"><span class="lbl">Difference</span><span class="val">${data.cold?.difference??'—'} bar</span></div>`;
   }
+
+  // Load photos
+  const d2=collectFormData();
+  const photoEntries=[];
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'Part I — Start',id:pid.part_i?.start_photo_id});
+    photoEntries.push({label:'Part I — End',id:pid.part_i?.end_photo_id});
+    photoEntries.push({label:'Part II — Start',id:pid.part_ii?.start_photo_id});
+    photoEntries.push({label:'Part II — End',id:pid.part_ii?.end_photo_id});
+  } else if(t==='QC-4.2'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'Start',id:pid.start_photo_id});
+    photoEntries.push({label:'End',id:pid.end_photo_id});
+    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
+  } else if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+  }
+  // Load images as base64
+  setStatus('Loading photos for PDF...');
+  const loadedPhotos=[];
+  for(const p of photoEntries){
+    if(p.id){
+      const b64=await getImageBase64(p.id);
+      loadedPhotos.push({label:p.label,src:b64});
+    } else {
+      loadedPhotos.push({label:p.label,src:null});
+    }
+  }
+  const hasPhotos=loadedPhotos.some(p=>p.src);
+  if(hasPhotos){
+    html+=`<div class="section">Photos / Appendix</div><div class="photos">`;
+    for(const p of loadedPhotos){
+      if(p.src){
+        html+=`<div class="photo-block"><div class="photo-lbl">${p.label}</div><img src="${p.src}" style="width:100%;border-radius:4px;max-height:300px;object-fit:contain"/></div>`;
+      }
+    }
+    html+=`</div>`;
+  }
+  setStatus('');
 
   html+=`<div class="section">Personnel</div>
   <div class="row"><span class="lbl">Performed by</span><span class="val">${data.performed_by||''}</span></div>
