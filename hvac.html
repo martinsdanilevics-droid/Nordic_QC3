@@ -1297,7 +1297,69 @@ async function _saveData(data){
     saveToCache();
     setStatus('Saved ✓ '+new Date().toLocaleTimeString());
     renderMatrix();
+    // Auto-generate PDF when test is Passed
+    if(data.result==='Passed'){
+      setStatus('Generating PDF...');
+      setTimeout(()=>generateAndUploadPDF(data,folder),300);
+    }
   }catch(e){setStatus('Save error: '+e.message);console.error(e);}
+}
+
+async function generateAndUploadPDF(data,folder){
+  try{
+    const pdfHtml=await buildPDFHtml(data);
+    // Convert HTML to blob via iframe + print to PDF is not automatable
+    // Instead: save as self-contained HTML report in OneDrive
+    const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});
+    const t=currentTestCtx.testType;
+    const mod=(data.module||'').replace(/[ -]/g,'');
+    const dateStr=(data.date||todayISO()).replace(/-/g,'');
+    const sysNo=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
+    const scopeSlug=(data.system_scope||'').replace(/\s+with\s+/gi,'-').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+    const fname=`${mod}_${t}${sysNo}${scopeSlug?'_'+scopeSlug:''}_${dateStr}_REPORT.html`;
+    const buf=await blob.arrayBuffer();
+    await fetch(`${GRAPH_BASE}/me/drive/items/${folder.id}:/${fname}:/content`,{
+      method:'PUT',
+      headers:{Authorization:`Bearer ${await ensureToken()}`,'Content-Type':'text/html'},
+      body:buf
+    });
+    setStatus('✓ Report saved to OneDrive: '+fname);
+  }catch(e){
+    setStatus('PDF save error: '+e.message);
+    console.error(e);
+  }
+}
+
+async function buildPDFHtml(data){
+  // Load photos as base64
+  const t=currentTestCtx.testType;
+  const tt=TEST_TYPES[t];
+  const photoEntries=[];
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'Part I — Start',id:pid.part_i?.start_photo_id});
+    photoEntries.push({label:'Part I — End',id:pid.part_i?.end_photo_id});
+    photoEntries.push({label:'Part II — Start',id:pid.part_ii?.start_photo_id});
+    photoEntries.push({label:'Part II — End',id:pid.part_ii?.end_photo_id});
+  } else if(t==='QC-4.2'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'Start',id:pid.start_photo_id});
+    photoEntries.push({label:'End',id:pid.end_photo_id});
+    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
+  } else {
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+  }
+  const loadedPhotos=[];
+  for(const p of photoEntries){
+    const src=p.id?await getImageBase64(p.id):null;
+    loadedPhotos.push({...p,src});
+  }
+  // Reuse exportPDF logic but return HTML string instead of opening window
+  return _buildPDFDocument(data,loadedPhotos);
 }
 
 // ========== PDF EXPORT ==========
@@ -1320,10 +1382,9 @@ async function getImageBase64(driveId){
   }catch(e){console.warn('Image load error',driveId,e);return null;}
 }
 
-async function exportPDF(){
-  const data=collectFormData();
-  const t=currentTestCtx.testType;
-  const tt=TEST_TYPES[t];
+function _buildPDFDocument(data,loadedPhotos){
+  const t=data.test_type||currentTestCtx?.testType;
+  const tt=TEST_TYPES[t]||{label:t,folder:t};
 
   // ── File name ──────────────────────────────────────────────────────────────
   const modSlug=data.module.replace(/\s/g,'-');
@@ -1331,34 +1392,6 @@ async function exportPDF(){
   const scopeSlug=(data.system_scope||'').replace(/\s+with\s+/gi,' - ').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
   const sysSlug=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
   const pdfName=`${modSlug}_${t}${sysSlug}${scopeSlug?'_'+scopeSlug:''}_${dateSlug}`;
-
-  // ── Load photos ────────────────────────────────────────────────────────────
-  const photoEntries=[];
-  if(t==='QC-4.0'||t==='QC-4.1'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'ANNEX 1 — Part I: Start',id:pid.part_i?.start_photo_id});
-    photoEntries.push({label:'ANNEX 2 — Part I: End',id:pid.part_i?.end_photo_id});
-    photoEntries.push({label:'ANNEX 3 — Part II: Start',id:pid.part_ii?.start_photo_id});
-    photoEntries.push({label:'ANNEX 4 — Part II: End',id:pid.part_ii?.end_photo_id});
-  } else if(t==='QC-4.2'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'ANNEX 1 — Start',id:pid.start_photo_id});
-    photoEntries.push({label:'ANNEX 2 — End',id:pid.end_photo_id});
-    photoEntries.push({label:'ANNEX 3 — Overview',id:pid.overview_photo_id});
-  } else {
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'ANNEX 1 — HOT: Start',id:pid.hot?.start_photo_id});
-    photoEntries.push({label:'ANNEX 2 — HOT: End',id:pid.hot?.end_photo_id});
-    photoEntries.push({label:'ANNEX 3 — COLD: Start',id:pid.cold?.start_photo_id});
-    photoEntries.push({label:'ANNEX 4 — COLD: End',id:pid.cold?.end_photo_id});
-  }
-  setStatus('Loading photos for PDF...');
-  const loadedPhotos=[];
-  for(const p of photoEntries){
-    const src=p.id?await getImageBase64(p.id):null;
-    loadedPhotos.push({...p,src});
-  }
-  setStatus('');
 
   // ── Result styling ─────────────────────────────────────────────────────────
   const res=data.result||'';
@@ -1544,12 +1577,46 @@ async function exportPDF(){
   </body></html>`;
 
   // ── Open + trigger print with suggested filename ───────────────────────────
+  return docHtml;
+}
+
+async function exportPDF(){
+  const data=collectFormData();
+  const t=currentTestCtx.testType;
+  const tt=TEST_TYPES[t];
+  // Load photos
+  const photoEntries=[];
+  if(t==='QC-4.0'||t==='QC-4.1'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'HOT — Start',id:pid.part_i?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:pid.part_i?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:pid.part_ii?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:pid.part_ii?.end_photo_id});
+  } else if(t==='QC-4.2'){
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'Start',id:pid.start_photo_id});
+    photoEntries.push({label:'End',id:pid.end_photo_id});
+    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
+  } else {
+    const pid=currentTestCtx.data||{};
+    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+  }
+  setStatus('Loading photos for PDF...');
+  const loadedPhotos=[];
+  for(const p of photoEntries){
+    const src=p.id?await getImageBase64(p.id):null;
+    loadedPhotos.push({...p,src});
+  }
+  setStatus('');
+  const docHtml=_buildPDFDocument(data,loadedPhotos);
   const win=window.open('','_blank');
   win.document.write(docHtml);
   win.document.close();
   win.focus();
-  // Set title so browser uses it as default save name
-  win.document.title=pdfName;
+  win.document.title=data.module+'_'+t+'_'+data.date;
   setTimeout(()=>win.print(),800);
 }
 </script>
