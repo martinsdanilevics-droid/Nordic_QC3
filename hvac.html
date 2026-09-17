@@ -1406,7 +1406,23 @@ async function exportPDF(){
       <div class="annex-sub">${tt.label} · ${data.module} · ${(data.date||'').split('-').reverse().join('.')}</div>
       <div class="annex-two-col">
         ${imgs.map(p=>`<div class="annex-photo-block">
-          <div class="annex-photo-label">${p.label.replace(/.*—\s*/,'')}</div>
+          <div class="annex-photo-label">${p.label.replace(/^ANNEX \d+ — /,'').replace(/.*—\s*/,'')}</div>
+          <img src="${p.src}" class="annex-img-half" alt="${p.label}"/>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  function allPhotosPage(photos){
+    // All 4 photos on one page in 2x2 grid
+    const imgs=photos.filter(p=>p.src);
+    if(!imgs.length)return '';
+    return `<div class="annex-page">
+      <div class="annex-group-title">Photo Documentation / Bilžu pielikums</div>
+      <div class="annex-sub">${tt.label} · ${data.module} · ${(data.date||'').split('-').reverse().join('.')}</div>
+      <div class="annex-two-col">
+        ${imgs.map(p=>`<div class="annex-photo-block">
+          <div class="annex-photo-label">${p.label.replace(/^ANNEX \d+ — /,'')}</div>
           <img src="${p.src}" class="annex-img-half" alt="${p.label}"/>
         </div>`).join('')}
       </div>
@@ -1414,16 +1430,14 @@ async function exportPDF(){
   }
 
   let annexHtml='';
-  if(t==='QC-4.0'||t==='QC-4.1'){
-    annexHtml+=photoPage('ANNEX 1 — Part I Measurements',loadedPhotos.slice(0,2));
-    annexHtml+=photoPage('ANNEX 2 — Part II Measurements',loadedPhotos.slice(2,4));
-  } else if(t==='QC-4.2'){
-    annexHtml+=photoPage('ANNEX 1 — Start & End Photos',loadedPhotos.slice(0,2));
-    if(loadedPhotos.length>2)annexHtml+=photoPage('ANNEX 2 — Overview',loadedPhotos.slice(2));
+  const hasPhotos4=loadedPhotos.filter(p=>p.src).length;
+  if(t==='QC-4.2'){
+    // Sewer: Start+End on one page, Overview separate if exists
+    annexHtml+=photoPage('ANNEX 1 — Start & End',loadedPhotos.slice(0,2));
+    if(loadedPhotos.length>2&&loadedPhotos[2].src)annexHtml+=photoPage('ANNEX 2 — Overview',loadedPhotos.slice(2));
   } else {
-    // QC-5.x: HOT on one page, COLD on another
-    annexHtml+=photoPage('ANNEX 1 — HOT Water Pipes',loadedPhotos.filter(p=>p.label.includes('HOT')));
-    annexHtml+=photoPage('ANNEX 2 — COLD Water Pipes',loadedPhotos.filter(p=>p.label.includes('COLD')));
+    // QC-4.0/4.1/5.x: all 4 photos on one page
+    annexHtml+=allPhotosPage(loadedPhotos);
   }
 
   // ── Full HTML ──────────────────────────────────────────────────────────────
@@ -1432,7 +1446,7 @@ async function exportPDF(){
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{font-family:'Segoe UI',Arial,sans-serif;font-size:11.5px;color:#1a1a1a;}
-    .page1{padding:25px 30px 25px;}
+    .page1{padding:20px 20px 20px 15px;}
     /* Header */
     .doc-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
     .doc-title h1{font-size:17px;font-weight:800;color:#1a3a2a;line-height:1.2;margin-bottom:3px;}
@@ -1479,7 +1493,7 @@ async function exportPDF(){
     .annex-photo-label{font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;}
     .annex-img-half{width:100%;max-height:160mm;object-fit:contain;border-radius:4px;border:1px solid #eee;}
     @media print{
-      @page{margin:2.54cm 3.18cm;}
+      @page{margin:20mm 20mm 20mm 35mm;}
       body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     }
   </style>
