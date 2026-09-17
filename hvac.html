@@ -1318,7 +1318,9 @@ async function generateAndUploadPDF(data,folder){
     const mod=(data.module||'').replace(/[ -]/g,'');
     const dateStr=(data.date||todayISO()).replace(/-/g,'');
     const sysNo=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
-    const scopeSlug=(data.system_scope||'').replace(/\s+with\s+/gi,'-').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+    const scopeDefaults2={'QC-4.0':'Underfloor-Heating','QC-4.1':'Radiator-Heating','QC-4.2':'Sewer-Hydraulic','QC-5.0':'Concealed-Wall-Piping','QC-5.1':'Collector-Piping','QC-5.2':'Full-System'};
+    const scopeRaw2=(data.system_scope||scopeDefaults2[t]||'');
+    const scopeSlug=scopeRaw2.replace(/\s+with\s+/gi,'-').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
     const fname=`${mod}_${t}${sysNo}${scopeSlug?'_'+scopeSlug:''}_${dateStr}_REPORT.html`;
     const buf=await blob.arrayBuffer();
     await fetch(`${GRAPH_BASE}/me/drive/items/${folder.id}:/${fname}:/content`,{
@@ -1423,7 +1425,10 @@ function _buildPDFDocument(data,loadedPhotos){
   // ── File name ──────────────────────────────────────────────────────────────
   const modSlug=data.module.replace(/\s/g,'-');
   const dateSlug=(data.date||todayISO()).split('-').reverse().join('-');
-  const scopeSlug=(data.system_scope||'').replace(/\s+with\s+/gi,' - ').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+  // Default scope per test type if not set
+  const scopeDefaults={'QC-4.0':'Underfloor-Heating','QC-4.1':'Radiator-Heating','QC-4.2':'Sewer-Hydraulic','QC-5.0':'Concealed-Wall-Piping','QC-5.1':'Collector-Piping','QC-5.2':'Full-System'};
+  const scopeRaw=data.system_scope||scopeDefaults[t]||'';
+  const scopeSlug=scopeRaw.replace(/\s+with\s+/gi,' - ').replace(/\s/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
   const sysSlug=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
   const pdfName=`${modSlug}_${t}${sysSlug}${scopeSlug?'_'+scopeSlug:''}_${dateSlug}`;
 
