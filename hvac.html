@@ -533,7 +533,9 @@ async function loadProjectTests(){
     const files=(searchRes.value||[]).filter(f=>
       f.name&&f.name.endsWith('.json')&&
       !f.name.startsWith('_')&&
-      !f.parentReference?.path?.includes('_Deleted')
+      !f.name.includes('_Deleted')&&
+      !(f.parentReference?.path||'').includes('_Deleted')&&
+      !(f.parentReference?.name||'').includes('_Deleted')
     );
 
     // Reset and re-populate
@@ -1232,10 +1234,11 @@ async function deleteTest(){
     const testFolder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
     // Create _Deleted subfolder inside test folder
     const delFolder=await ensureFolder(testFolder.id,'_Deleted');
-    // Move JSON file
+    // Move JSON file - first rename with _DELETED_ prefix so search filter excludes it
+    const deletedName='_DELETED_'+currentTestCtx.fileName;
     await graphRequest(`/me/drive/items/${currentTestCtx.fileId}`,{
       method:'PATCH',
-      body:JSON.stringify({parentReference:{id:delFolder.id}})
+      body:JSON.stringify({name:deletedName,parentReference:{id:delFolder.id}})
     });
     // Move all photos referenced in test data
     const d=currentTestCtx.data||{};
