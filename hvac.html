@@ -1388,25 +1388,34 @@ async function getImageBase64(driveId){
       dataUrl=await new Promise(r=>{const rd=new FileReader();rd.onload=e=>r(e.target.result);rd.onerror=()=>r(null);rd.readAsDataURL(blob);});
     }
     if(!dataUrl)return null;
-    // Load image to check dimensions, rotate landscape to portrait via Canvas
+    // Rotate landscape images to portrait via Canvas
     const finalSrc=await new Promise(r=>{
       const img=new Image();
       img.onload=()=>{
-        if(img.naturalWidth<=img.naturalHeight){r(dataUrl);return;}
-        // Rotate 90deg clockwise using canvas
-        const canvas=document.createElement('canvas');
-        canvas.width=img.naturalHeight;
-        canvas.height=img.naturalWidth;
-        const ctx=canvas.getContext('2d');
-        ctx.translate(canvas.width/2,canvas.height/2);
-        ctx.rotate(Math.PI/2);
-        ctx.drawImage(img,-img.naturalWidth/2,-img.naturalHeight/2);
-        r(canvas.toDataURL('image/jpeg',0.92));
+        const w=img.naturalWidth, h=img.naturalHeight;
+        if(w<=h){r(dataUrl);return;} // already portrait
+        try{
+          // Rotate 90° clockwise: canvas is h×w (portrait)
+          const canvas=document.createElement('canvas');
+          canvas.width=h;
+          canvas.height=w;
+          const ctx=canvas.getContext('2d');
+          ctx.save();
+          ctx.translate(h,0);      // move origin to top-right of canvas
+          ctx.rotate(Math.PI/2);   // rotate 90° clockwise
+          ctx.drawImage(img,0,0);  // draw at (0,0) in rotated space
+          ctx.restore();
+          const result=canvas.toDataURL('image/jpeg',0.90);
+          r(result&&result.length>100?result:dataUrl);
+        }catch(e){
+          console.warn('Canvas rotate failed:',e);
+          r(dataUrl);
+        }
       };
-      img.onerror=()=>r(dataUrl);
-      img.src=dataUrl;
+      img.onerror=()=>{console.warn('img.onerror for rotation');r(dataUrl);};
+      img.src=dataUrl; // base64 — no CORS issue
     });
-    return {src:finalSrc,isLandscape:false}; // always portrait after rotation
+    return {src:finalSrc,isLandscape:false};
   }catch(e){console.warn('Image load error',driveId,e);return null;}
 }
 
