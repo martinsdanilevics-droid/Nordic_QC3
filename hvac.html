@@ -1390,26 +1390,60 @@ async function getImageBase64(driveId){
       dataUrl=await new Promise(r=>{const rd=new FileReader();rd.onload=e=>r(e.target.result);rd.onerror=()=>r(null);rd.readAsDataURL(blob);});
     }
     if(!dataUrl)return null;
-    // Rotate landscape images to portrait via Canvas
+    // Detect EXIF orientation and rotate landscape to portrait via Canvas
     const finalSrc=await new Promise((resolve)=>{
+      // Read EXIF orientation from raw bytes
+      let exifOrientation=1;
+      try{
+        const arr=new Uint8Array(atob(dataUrl.split(',')[1]).split('').map(c=>c.charCodeAt(0)));
+        let i=2;
+        while(i<arr.length){
+          if(arr[i]!==0xFF)break;
+          const marker=arr[i+1];
+          if(marker===0xE1){
+            // APP1 - look for Exif
+            const exifStr=String.fromCharCode(...arr.slice(i+4,i+10));
+            if(exifStr.startsWith('Exif')){
+              const tiffOff=i+10;
+              const littleEndian=arr[tiffOff]===0x49;
+              const read16=(o)=>littleEndian?(arr[tiffOff+o]|arr[tiffOff+o+1]<<8):(arr[tiffOff+o]<<8|arr[tiffOff+o+1]);
+              const read32=(o)=>littleEndian?(arr[tiffOff+o]|arr[tiffOff+o+1]<<8|arr[tiffOff+o+2]<<16|arr[tiffOff+o+3]<<24):(arr[tiffOff+o]<<24|arr[tiffOff+o+1]<<16|arr[tiffOff+o+2]<<8|arr[tiffOff+o+3]);
+              const ifdOff=read32(4);
+              const entries=read16(ifdOff);
+              for(let e=0;e<entries;e++){
+                const eOff=ifdOff+2+e*12;
+                if(read16(eOff)===0x0112){exifOrientation=read16(eOff+8);break;}
+              }
+            }
+            break;
+          }
+          i+=2+(arr[i+2]<<8|arr[i+3]);
+        }
+      }catch(ex){}
+
       const img=new Image();
       img.onload=function(){
-        const w=img.naturalWidth, h=img.naturalHeight;
-        if(w<=h){resolve(dataUrl);return;} // already portrait, no change
+        const w=img.naturalWidth,h=img.naturalHeight;
+        // Need rotation if: naturalWidth>naturalHeight OR EXIF says rotated (5,6,7,8)
+        const needsRotate=(w>h)||(exifOrientation>=5);
+        if(!needsRotate){resolve(dataUrl);return;}
         try{
           const canvas=document.createElement('canvas');
-          canvas.width=h;   // portrait width = original height
-          canvas.height=w;  // portrait height = original width
+          canvas.width=h; canvas.height=w;
           const ctx=canvas.getContext('2d');
-          ctx.translate(h,0);       // origin → top-right corner
-          ctx.rotate(Math.PI/2);    // rotate 90° clockwise
-          ctx.drawImage(img,0,0,w,h); // draw original
+          if(exifOrientation===8){
+            // 90° counter-clockwise
+            ctx.translate(0,w);
+            ctx.rotate(-Math.PI/2);
+          } else {
+            // 90° clockwise (default for landscape phones)
+            ctx.translate(h,0);
+            ctx.rotate(Math.PI/2);
+          }
+          ctx.drawImage(img,0,0,w,h);
           const rotated=canvas.toDataURL('image/jpeg',0.88);
           resolve(rotated&&rotated.length>500?rotated:dataUrl);
-        }catch(err){
-          console.warn('Canvas rotation error:',err);
-          resolve(dataUrl);
-        }
+        }catch(err){resolve(dataUrl);}
       };
       img.onerror=function(){resolve(dataUrl);};
       img.src=dataUrl;
@@ -1479,7 +1513,7 @@ function _buildPDFDocument(data,loadedPhotos){
       <div class="annex-two-col">
         ${imgs.map(p=>`<div class="annex-photo-block">
           <div class="annex-photo-label">${p.label.replace(/^ANNEX \d+ — /,'').replace(/.*—\s*/,'')}</div>
-          <img src="${p.src}" class="annex-img-half" alt="${p.label}"/>
+          <div class="annex-photo-wrap"><img src="${p.src}" class="annex-img-half" alt="${p.label}"/></div>
         </div>`).join('')}
       </div>
     </div>`;
@@ -1495,7 +1529,7 @@ function _buildPDFDocument(data,loadedPhotos){
       <div class="annex-two-col">
         ${imgs.map(p=>`<div class="annex-photo-block">
           <div class="annex-photo-label">${p.label.replace(/^ANNEX \d+ — /,'')}</div>
-          <img src="${p.src}" class="annex-img-half" alt="${p.label}"/>
+          <div class="annex-photo-wrap"><img src="${p.src}" class="annex-img-half" alt="${p.label}"/></div>
         </div>`).join('')}
       </div>
     </div>`;
@@ -1563,13 +1597,16 @@ function _buildPDFDocument(data,loadedPhotos){
     .annex-two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .annex-photo-block{display:flex;flex-direction:column;break-inside:avoid;page-break-inside:avoid;}
     .annex-photo-label{font-size:11px;font-weight:700;color:#555;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.3px;}
-    .annex-img-half{
+    .annex-photo-wrap{
       width:100%;
-      height:120mm;
-      object-fit:cover;
-      object-position:center top;
       border-radius:4px;
       border:1px solid #eee;
+      background:#f5f5f5;
+      overflow:hidden;
+    }
+    .annex-img-half{
+      width:100%;
+      height:auto;
       display:block;
     }
     @media print{
