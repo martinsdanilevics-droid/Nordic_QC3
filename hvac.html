@@ -1334,32 +1334,29 @@ async function generateAndUploadPDF(data,folder){
 }
 
 async function buildPDFHtml(data){
-  // Load photos as base64
-  const t=currentTestCtx.testType;
-  const tt=TEST_TYPES[t];
+  // Load photos as base64 — use data param (saved JSON) for photo IDs
+  const t=data.test_type||currentTestCtx?.testType;
   const photoEntries=[];
   if(t==='QC-4.0'||t==='QC-4.1'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'Part I — Start',id:pid.part_i?.start_photo_id});
-    photoEntries.push({label:'Part I — End',id:pid.part_i?.end_photo_id});
-    photoEntries.push({label:'Part II — Start',id:pid.part_ii?.start_photo_id});
-    photoEntries.push({label:'Part II — End',id:pid.part_ii?.end_photo_id});
+    photoEntries.push({label:'Part I — Start',id:data.part_i?.start_photo_id});
+    photoEntries.push({label:'Part I — End',id:data.part_i?.end_photo_id});
+    photoEntries.push({label:'Part II — Start',id:data.part_ii?.start_photo_id});
+    photoEntries.push({label:'Part II — End',id:data.part_ii?.end_photo_id});
   } else if(t==='QC-4.2'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'Start',id:pid.start_photo_id});
-    photoEntries.push({label:'End',id:pid.end_photo_id});
-    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
+    photoEntries.push({label:'Start',id:data.start_photo_id});
+    photoEntries.push({label:'End',id:data.end_photo_id});
+    photoEntries.push({label:'Overview',id:data.overview_photo_id});
   } else {
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
-    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
-    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
-    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+    // QC-5.x
+    photoEntries.push({label:'HOT — Start',id:data.hot?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:data.hot?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:data.cold?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:data.cold?.end_photo_id});
   }
   const loadedPhotos=[];
   for(const p of photoEntries){
     const result=p.id?await getImageBase64(p.id):null;
-    loadedPhotos.push({...p,src:result?.src||null,isLandscape:result?.isLandscape||false});
+    loadedPhotos.push({...p,src:result?.src||null,isLandscape:false});
   }
   return _buildPDFDocument(data,loadedPhotos);
 }
@@ -1622,32 +1619,29 @@ function _buildPDFDocument(data,loadedPhotos){
 async function exportPDF(){
   const data=collectFormData();
   const t=currentTestCtx.testType;
-  const tt=TEST_TYPES[t];
-  // Load photos
+  // Build photo entries from saved data (has photo IDs)
+  const saved=currentTestCtx.data||{};
   const photoEntries=[];
   if(t==='QC-4.0'||t==='QC-4.1'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'HOT — Start',id:pid.part_i?.start_photo_id});
-    photoEntries.push({label:'HOT — End',id:pid.part_i?.end_photo_id});
-    photoEntries.push({label:'COLD — Start',id:pid.part_ii?.start_photo_id});
-    photoEntries.push({label:'COLD — End',id:pid.part_ii?.end_photo_id});
+    photoEntries.push({label:'Part I — Start',id:saved.part_i?.start_photo_id});
+    photoEntries.push({label:'Part I — End',id:saved.part_i?.end_photo_id});
+    photoEntries.push({label:'Part II — Start',id:saved.part_ii?.start_photo_id});
+    photoEntries.push({label:'Part II — End',id:saved.part_ii?.end_photo_id});
   } else if(t==='QC-4.2'){
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'Start',id:pid.start_photo_id});
-    photoEntries.push({label:'End',id:pid.end_photo_id});
-    photoEntries.push({label:'Overview',id:pid.overview_photo_id});
+    photoEntries.push({label:'Start',id:saved.start_photo_id});
+    photoEntries.push({label:'End',id:saved.end_photo_id});
+    photoEntries.push({label:'Overview',id:saved.overview_photo_id});
   } else {
-    const pid=currentTestCtx.data||{};
-    photoEntries.push({label:'HOT — Start',id:pid.hot?.start_photo_id});
-    photoEntries.push({label:'HOT — End',id:pid.hot?.end_photo_id});
-    photoEntries.push({label:'COLD — Start',id:pid.cold?.start_photo_id});
-    photoEntries.push({label:'COLD — End',id:pid.cold?.end_photo_id});
+    photoEntries.push({label:'HOT — Start',id:saved.hot?.start_photo_id});
+    photoEntries.push({label:'HOT — End',id:saved.hot?.end_photo_id});
+    photoEntries.push({label:'COLD — Start',id:saved.cold?.start_photo_id});
+    photoEntries.push({label:'COLD — End',id:saved.cold?.end_photo_id});
   }
   setStatus('Loading photos for PDF...');
   const loadedPhotos=[];
   for(const p of photoEntries){
     const result=p.id?await getImageBase64(p.id):null;
-    loadedPhotos.push({...p,src:result?.src||null,isLandscape:result?.isLandscape||false});
+    loadedPhotos.push({...p,src:result?.src||null,isLandscape:false});
   }
   setStatus('');
   const docHtml=_buildPDFDocument(data,loadedPhotos);
