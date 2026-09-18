@@ -1237,13 +1237,23 @@ function setResult(passed,failed){
   const bar=document.getElementById('result-bar');
   const lbl=document.getElementById('result-label');
   if(!bar||!lbl)return;
-  if(currentTestCtx?.data?.result==='Pending'){bar.className='result-bar pending';lbl.textContent='PENDING';}
-  else if(passed){bar.className='result-bar passed';lbl.textContent='PASSED';}
-  else if(failed){bar.className='result-bar failed';lbl.textContent='FAILED';}
-  else{bar.className='result-bar pending';lbl.textContent='—';}
-  // Show Save as Passed only when result is Passed
+  const savedResult=currentTestCtx?.data?.result;
+  if(savedResult==='Passed'&&passed){
+    // Already saved as Passed and still passing
+    bar.className='result-bar passed';lbl.textContent='PASSED';
+  } else if(savedResult==='Pending'){
+    // Saved as Pending - show PENDING but still show Save as Passed if calc passes
+    bar.className='result-bar pending';lbl.textContent='PENDING';
+  } else if(passed){
+    bar.className='result-bar passed';lbl.textContent='PASSED';
+  } else if(failed){
+    bar.className='result-bar failed';lbl.textContent='FAILED';
+  } else {
+    bar.className='result-bar pending';lbl.textContent='—';
+  }
+  // Always show Save as Passed when calculation result is Passed
   const btnP=document.getElementById('btn-save-passed');
-  if(btnP)btnP.style.display=(passed&&currentTestCtx?.data?.result!=='Passed')?'inline-block':'none';
+  if(btnP)btnP.style.display=passed?'inline-block':'none';
 }
 
 // ========== COLLECT FORM DATA ==========
@@ -1320,15 +1330,16 @@ async function saveTest(){
 async function saveAsPassed(){
   if(!msConnected){alert('Connect OneDrive first.');return;}
   const data=collectFormData();
+  // Allow saving as Passed if calculated result is Passed
   if(data.result!=='Passed'){setStatus('Result is not Passed — check pressure differences.');return;}
   data.result='Passed';
   data.status='Passed';
   if(!currentTestCtx.data)currentTestCtx.data={};
   currentTestCtx.data.result='Passed';
+  currentTestCtx.data.status='Passed';
   await _saveData(data);
+  // Update UI - hide Save as Passed (already saved), update result bar
   setResult(true,false);
-  const btnP=document.getElementById('btn-save-passed');
-  if(btnP)btnP.style.display='none';
   updateDiffs();
 }
 
