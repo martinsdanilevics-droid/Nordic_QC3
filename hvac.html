@@ -950,10 +950,22 @@ function closeLightbox(e){
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('lightbox').classList.remove('open');});
 
 function renderPhotoSlot(slotId,label,driveId){
-  return `<div class="photo-slot" id="slot-${slotId}" data-slot="${slotId}">
+  return `<div class="photo-slot" id="slot-${slotId}" data-slot="${slotId}" onclick="handleSlotClick('${slotId}')">
     <div class="photo-label">${label}</div>
     <div class="uploading-overlay" id="upl-${slotId}" style="display:none">Uploading...</div>
   </div>`;
+}
+
+function handleSlotClick(slotId){
+  const slot=document.getElementById('slot-'+slotId);
+  if(!slot)return;
+  const driveId=slot.getAttribute('data-drive-id');
+  if(driveId){
+    openPhotoLightbox(driveId);
+  } else {
+    currentPhotoSlot=slotId;
+    document.getElementById('photo-modal').style.display='flex';
+  }
 }
 
 function setupPhotoSlots(){
@@ -1005,7 +1017,7 @@ function setSlotImage(slotId,url,driveId){
   slot.setAttribute('data-drive-id',driveId);
   slot.style.cursor='zoom-in';
   slot.title='Nospied lai palielinātu';
-  slot.onclick=null; // handled by event delegation
+  // onclick is set in HTML template via handleSlotClick which reads data-drive-id
 }
 
 function clickPhotoSlot(slotId){
@@ -1022,23 +1034,7 @@ function closePhotoModal(){
   document.getElementById('photo-modal').style.display='none';
 }
 
-// Event delegation for photo slots
-document.addEventListener('click',function(e){
-  if(e.target.classList.contains('remove-btn'))return;
-  const slot=e.target.closest('.photo-slot');
-  if(!slot)return;
-  const slotId=slot.dataset.slot;
-  if(!slotId)return;
-  const driveId=slot.getAttribute('data-drive-id');
-  if(driveId){
-    // Has photo -> lightbox
-    openPhotoLightbox(driveId);
-  } else {
-    // No photo -> show camera/gallery modal
-    currentPhotoSlot=slotId;
-    document.getElementById('photo-modal').style.display='flex';
-  }
-},true);
+// Photo slot clicks handled via onclick in renderPhotoSlot
 
 async function openPhotoLightbox(driveId){
   const lb=document.getElementById('lightbox');
