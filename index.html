@@ -483,12 +483,6 @@ async function ensureProjectFolderAndLoad(){
     document.getElementById('drive-folder-link').innerHTML=`<a href="${projFolder.webUrl}" target="_blank">Open in OneDrive</a>`;
     moduleFolderIds={};
     driveFileIds={};
-    // Pre-create all module subfolders so HVAC app can find them
-    const allMods=getProjectCfg().modules;
-    for(let i=0;i<allMods.length;i++){
-      setStatus(`Creating module folders… ${i+1}/${allMods.length}`);
-      await ensureModuleFolder(allMods[i]);
-    }
     await loadAllFromDrive();
   }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
 }
@@ -515,9 +509,9 @@ async function loadAllFromDrive(){
 async function loadModuleFromDrive(modName){
   try{
     const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
-    // Look in module subfolder (not project root)
-    const modFolderId=await ensureModuleFolder(modName);
-    const search=await graphRequest(`/me/drive/items/${modFolderId}/children?$filter=name eq '${fname}'&$select=id,name`);
+    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
+    // Search in project folder
+    const search=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${fname}'&$select=id,name`);
     const files=search.value||[];
     if(files.length>0){
       driveFileIds[modName]=files[0].id;
@@ -758,14 +752,33 @@ async function loadThumbnails(){
 }
 
 async function openOneDrivePhoto(driveId){
-  try{
-    const token=await ensureToken();
-    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
-    const blob=await res.blob();
-    const url=URL.createObjectURL(blob);
-    document.getElementById('lightbox-img').src=url;
-    document.getElementById('lightbox').classList.add('open');
-  }catch(e){console.error('Open photo error:',e);}
+  const lightbox=document.getElementById('lightbox');
+  const lbImg=document.getElementById('lightbox-img');
+  // Check if thumbnail already loaded as blob
+  const thumbImg=document.querySelector(`img[data-id="${driveId}"]`);
+  if(thumbImg&&thumbImg.src.startsWith('blob:')){
+    // Show thumbnail instantly, then load full size in background
+    lbImg.src=thumbImg.src;
+    lightbox.classList.add('open');
+    // Load full size
+    try{
+      const token=await ensureToken();
+      const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
+      const blob=await res.blob();
+      lbImg.src=URL.createObjectURL(blob);
+    }catch(e){console.warn('Full photo load error:',e);}
+  } else {
+    // No thumbnail yet — load full size directly
+    try{
+      setStatus('Loading photo...');
+      const token=await ensureToken();
+      const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
+      const blob=await res.blob();
+      lbImg.src=URL.createObjectURL(blob);
+      lightbox.classList.add('open');
+      setStatus('');
+    }catch(e){console.error('Open photo error:',e);setStatus('Photo load error');}
+  }
 }
 
 // ---- ITEM STATUS & DATA ----
@@ -1103,6 +1116,7 @@ function dateToISO(d){
 }
 function setStatus(msg){document.getElementById('save-status').textContent=msg;}
 function closeLightbox(e){if(e.target===document.getElementById('lightbox'))document.getElementById('lightbox').classList.remove('open');}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('lightbox').classList.remove('open');});
 
 let autoSaveTimer=null;
 function autoSave(){
