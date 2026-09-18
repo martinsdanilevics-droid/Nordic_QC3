@@ -798,16 +798,16 @@ function renderHeatingForm(d,testType){
           <td>Part I</td>
           <td><input type="time" id="f-p1-ts" value="${d.part_i?.start_time||''}"/></td>
           <td><input type="time" id="f-p1-te" value="${d.part_i?.end_time||''}"/></td>
-          <td><input type="number" id="f-p1-ps" step="0.1" value="${d.part_i?.pressure_start??( testType==='QC-4.0'?6:8)}" oninput="updateDiffs()"/></td>
-          <td><input type="number" id="f-p1-pe" step="0.1" value="${d.part_i?.pressure_end??( testType==='QC-4.0'?6:8)}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p1-ps" step="0.1" value="${d.part_i?.pressure_start??''}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p1-pe" step="0.1" value="${d.part_i?.pressure_end??''}" oninput="updateDiffs()"/></td>
           <td class="diff-cell" id="diff-p1">—</td>
         </tr>
         <tr>
           <td>Part II</td>
           <td><input type="time" id="f-p2-ts" value="${d.part_ii?.start_time||''}"/></td>
           <td><input type="time" id="f-p2-te" value="${d.part_ii?.end_time||''}"/></td>
-          <td><input type="number" id="f-p2-ps" step="0.1" value="${d.part_ii?.pressure_start??( testType==='QC-4.0'?6:8)}" oninput="updateDiffs()"/></td>
-          <td><input type="number" id="f-p2-pe" step="0.1" value="${d.part_ii?.pressure_end??( testType==='QC-4.0'?6:8)}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p2-ps" step="0.1" value="${d.part_ii?.pressure_start??''}" oninput="updateDiffs()"/></td>
+          <td><input type="number" id="f-p2-pe" step="0.1" value="${d.part_ii?.pressure_end??''}" oninput="updateDiffs()"/></td>
           <td class="diff-cell" id="diff-p2">—</td>
         </tr>
       </tbody>
@@ -903,8 +903,8 @@ function renderWaterForm(d,testType){
     <table class="meas-table">
       <thead><tr><th>Pressure Start — HOT (bar)</th><th>Pressure End — HOT (bar)</th><th>Difference (bar)</th></tr></thead>
       <tbody><tr>
-        <td><input type="number" id="f-hot-ps" step="0.1" value="${d.hot?.pressure_start??(testType==='QC-5.1'?6:8)}" oninput="updateDiffs()"/></td>
-        <td><input type="number" id="f-hot-pe" step="0.1" value="${d.hot?.pressure_end??(testType==='QC-5.1'?6:8)}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-hot-ps" step="0.1" value="${d.hot?.pressure_start??''}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-hot-pe" step="0.1" value="${d.hot?.pressure_end??''}" oninput="updateDiffs()"/></td>
         <td class="diff-cell" id="diff-hot">—</td>
       </tr></tbody>
     </table>
@@ -912,8 +912,8 @@ function renderWaterForm(d,testType){
     <table class="meas-table">
       <thead><tr><th>Pressure Start — COLD (bar)</th><th>Pressure End — COLD (bar)</th><th>Difference (bar)</th></tr></thead>
       <tbody><tr>
-        <td><input type="number" id="f-cold-ps" step="0.1" value="${d.cold?.pressure_start??(testType==='QC-5.1'?6:8)}" oninput="updateDiffs()"/></td>
-        <td><input type="number" id="f-cold-pe" step="0.1" value="${d.cold?.pressure_end??(testType==='QC-5.1'?6:8)}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-cold-ps" step="0.1" value="${d.cold?.pressure_start??''}" oninput="updateDiffs()"/></td>
+        <td><input type="number" id="f-cold-pe" step="0.1" value="${d.cold?.pressure_end??''}" oninput="updateDiffs()"/></td>
         <td class="diff-cell" id="diff-cold">—</td>
       </tr></tbody>
     </table>
