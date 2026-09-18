@@ -983,13 +983,18 @@ async function loadThumbnail(slotId,driveId){
 function setSlotImage(slotId,url,driveId){
   const slot=document.getElementById('slot-'+slotId);
   if(!slot)return;
-  const label=slot.querySelector('.photo-label')?.textContent||'';
+  const label=slot.querySelector('.photo-label')?.textContent||slotId;
   slot.innerHTML=`
-    <img src="${url}" alt="photo"/>
+    <img src="${url}" alt="photo" style="width:100%;height:100%;object-fit:cover;display:block;"/>
     <div class="photo-label-overlay">${label}</div>
     <button class="remove-btn" onclick="removePhoto(event,'${slotId}','${driveId}')">✕</button>`;
   slot.setAttribute('data-drive-id',driveId);
-  slot.onclick=null;
+  slot.style.cursor='zoom-in';
+  slot.title='Nospied lai palielinātu';
+  slot.onclick=(e)=>{
+    if(e.target.classList.contains('remove-btn'))return;
+    openLightbox(url,label);
+  };
 }
 
 function clickPhotoSlot(slotId){
