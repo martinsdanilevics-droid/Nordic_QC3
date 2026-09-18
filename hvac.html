@@ -1315,10 +1315,18 @@ async function saveTest(){
 
 // ========== PENDING + DELETE ==========
 async function saveAsPassed(){
+  if(!msConnected){alert('Connect OneDrive first.');return;}
   const data=collectFormData();
   if(data.result!=='Passed'){setStatus('Result is not Passed — check pressure differences.');return;}
+  data.result='Passed';
   data.status='Passed';
+  if(!currentTestCtx.data)currentTestCtx.data={};
+  currentTestCtx.data.result='Passed';
   await _saveData(data);
+  setResult(true,false);
+  const btnP=document.getElementById('btn-save-passed');
+  if(btnP)btnP.style.display='none';
+  updateDiffs();
 }
 
 async function saveAsPending(){
