@@ -81,9 +81,9 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:8px;}
 .photo-slot{border:2px dashed #ccc;border-radius:8px;aspect-ratio:4/3;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:#fafafa;transition:border-color 0.2s;}
 .photo-slot:hover{border-color:#2d5a3d;background:#f0f8f2;}
-.photo-slot img{width:100%;height:100%;object-fit:cover;border-radius:6px;}
-.photo-slot .photo-label{font-size:10px;color:#888;text-align:center;padding:4px;font-weight:600;}
-.photo-slot .photo-label-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:4px 6px;text-align:center;}
+.photo-slot img{width:100%;height:100%;object-fit:cover;border-radius:6px;pointer-events:none;}
+.photo-slot .photo-label{font-size:10px;color:#888;text-align:center;padding:4px;font-weight:600;pointer-events:none;}
+.photo-slot .photo-label-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.55);color:#fff;font-size:10px;padding:4px 6px;text-align:center;pointer-events:none;}
 .photo-slot .remove-btn{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:13px;display:none;align-items:center;justify-content:center;}
 .photo-slot:hover .remove-btn{display:flex;}
 .uploading-overlay{position:absolute;inset:0;background:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;font-size:12px;color:#2d5a3d;}
@@ -1010,14 +1010,14 @@ function setSlotImage(slotId,url,driveId){
   const slot=document.getElementById('slot-'+slotId);
   if(!slot)return;
   const label=slot.querySelector('.photo-label')?.textContent||slotId;
-  slot.innerHTML=`
-    <img src="${url}" alt="photo" style="width:100%;height:100%;object-fit:cover;display:block;"/>
-    <div class="photo-label-overlay">${label}</div>
-    <button class="remove-btn" onclick="removePhoto(event,'${slotId}','${driveId}')">✕</button>`;
   slot.setAttribute('data-drive-id',driveId);
+  slot.setAttribute('onclick',`handleSlotClick('${slotId}')`);
   slot.style.cursor='zoom-in';
   slot.title='Nospied lai palielinātu';
-  // onclick is set in HTML template via handleSlotClick which reads data-drive-id
+  slot.innerHTML=`
+    <img src="${url}" alt="photo" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;"/>
+    <div class="photo-label-overlay" style="pointer-events:none">${label}</div>
+    <button class="remove-btn" onclick="removePhoto(event,'${slotId}','${driveId}');event.stopPropagation();">✕</button>`;
 }
 
 function clickPhotoSlot(slotId){
