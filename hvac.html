@@ -182,6 +182,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 <!-- Hidden file inputs -->
 <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(event)"/>
 <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoInput(event)"/>
+<input type="file" id="file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(event)"/>
 
 <script>
 // ========== CONFIG ==========
@@ -992,26 +993,34 @@ function setSlotImage(slotId,url,driveId){
 
 function clickPhotoSlot(slotId){
   currentPhotoSlot=slotId;
-  const ci=document.getElementById('camera-input');
-  ci.click();
+  document.getElementById('photo-modal').style.display='flex';
+}
+function photoModalChoose(type){
+  document.getElementById('photo-modal').style.display='none';
+  if(type==='camera') document.getElementById('camera-input').click();
+  else document.getElementById('file-input').click();
+}
+function closePhotoModal(){
+  currentPhotoSlot=null;
+  document.getElementById('photo-modal').style.display='none';
 }
 
-// Event delegation for photo slots - lightbox or upload
+// Event delegation for photo slots
 document.addEventListener('click',function(e){
   if(e.target.classList.contains('remove-btn'))return;
   const slot=e.target.closest('.photo-slot');
   if(!slot)return;
   const slotId=slot.dataset.slot;
   if(!slotId)return;
-  // Check if slot has a photo (by driveId stored on slot)
   const driveId=slot.getAttribute('data-drive-id');
   if(driveId){
+    // Has photo -> lightbox
     openPhotoLightbox(driveId);
-    return;
+  } else {
+    // No photo -> show camera/gallery modal
+    currentPhotoSlot=slotId;
+    document.getElementById('photo-modal').style.display='flex';
   }
-  // No image -> upload
-  currentPhotoSlot=slotId;
-  document.getElementById('camera-input').click();
 },true);
 
 async function openPhotoLightbox(driveId){
