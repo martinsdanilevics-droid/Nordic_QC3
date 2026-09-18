@@ -104,6 +104,8 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .btn-primary:hover{background:#1a3a2a;}
 .btn-secondary{padding:10px 22px;background:#fff;color:#2d5a3d;border:2px solid #2d5a3d;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
 .btn-secondary:hover{background:#f0f8f2;}
+.btn-passed{padding:10px 22px;background:#166534;color:#fff;border:2px solid #166534;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
+.btn-passed:hover{background:#14532d;}
 .btn-pending{padding:10px 22px;background:#fff;color:#e65100;border:2px solid #e65100;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
 .btn-pending:hover{background:#fff3e0;}
 .btn-danger{padding:10px 22px;background:#fff;color:#c62828;border:2px solid #c62828;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;}
@@ -912,6 +914,7 @@ function renderPersonnelAndResult(d){
   <div class="action-row">
     <button class="btn-primary" onclick="saveTest()">💾 Save</button>
     <button class="btn-secondary" onclick="exportPDF()">📄 Export PDF</button>
+    <button class="btn-passed" id="btn-save-passed" onclick="saveAsPassed()" style="display:none">✅ Save as Passed</button>
     <button class="btn-pending" onclick="saveAsPending()">⏳ Save as Pending</button>
     ${isAdmin()?`<button class="btn-danger" onclick="deleteTest()">🗑 Delete Test</button>`:''}
   </div>`;
@@ -1215,6 +1218,13 @@ async function saveTest(){
 }
 
 // ========== PENDING + DELETE ==========
+async function saveAsPassed(){
+  const data=collectFormData();
+  if(data.result!=='Passed'){setStatus('Result is not Passed — check pressure differences.');return;}
+  data.status='Passed';
+  await _saveData(data);
+}
+
 async function saveAsPending(){
   if(!msConnected){alert('Connect OneDrive first.');return;}
   const data=collectFormData();
