@@ -936,7 +936,7 @@ function closeLightbox(){
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
 
 function renderPhotoSlot(slotId,label,driveId){
-  return `<div class="photo-slot" id="slot-${slotId}" onclick="clickPhotoSlot('${slotId}')">
+  return `<div class="photo-slot" id="slot-${slotId}" data-slot="${slotId}">
     <div class="photo-label">${label}</div>
     <div class="uploading-overlay" id="upl-${slotId}" style="display:none">Uploading...</div>
   </div>`;
@@ -999,10 +999,28 @@ function setSlotImage(slotId,url,driveId){
 
 function clickPhotoSlot(slotId){
   currentPhotoSlot=slotId;
-  // Try camera first on mobile
   const ci=document.getElementById('camera-input');
   ci.click();
 }
+
+// Event delegation for photo slots - lightbox or upload
+document.addEventListener('click',function(e){
+  if(e.target.classList.contains('remove-btn'))return;
+  const slot=e.target.closest('.photo-slot');
+  if(!slot)return;
+  const slotId=slot.dataset.slot;
+  if(!slotId)return;
+  // If slot has image -> open lightbox
+  const img=slot.querySelector('img');
+  if(img&&img.src&&img.src.startsWith('http')){
+    const label=slot.querySelector('.photo-label-overlay,.photo-label')?.textContent||slotId;
+    openLightbox(img.src,label);
+    return;
+  }
+  // No image -> upload
+  currentPhotoSlot=slotId;
+  document.getElementById('camera-input').click();
+});
 
 document.getElementById('camera-input').onchange=handlePhotoInput;
 document.getElementById('photo-input').onchange=handlePhotoInput;
@@ -1160,10 +1178,13 @@ function setResult(passed,failed){
   const bar=document.getElementById('result-bar');
   const lbl=document.getElementById('result-label');
   if(!bar||!lbl)return;
-  if(currentTestCtx?.data?.result==='Pending'){bar.className='result-bar pending';lbl.textContent='PENDING';return;}
-  if(passed){bar.className='result-bar passed';lbl.textContent='PASSED';}
+  if(currentTestCtx?.data?.result==='Pending'){bar.className='result-bar pending';lbl.textContent='PENDING';}
+  else if(passed){bar.className='result-bar passed';lbl.textContent='PASSED';}
   else if(failed){bar.className='result-bar failed';lbl.textContent='FAILED';}
   else{bar.className='result-bar pending';lbl.textContent='—';}
+  // Show Save as Passed only when result is Passed
+  const btnP=document.getElementById('btn-save-passed');
+  if(btnP)btnP.style.display=(passed&&currentTestCtx?.data?.result!=='Passed')?'inline-block':'none';
 }
 
 // ========== COLLECT FORM DATA ==========
