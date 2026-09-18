@@ -921,19 +921,15 @@ function renderPersonnelAndResult(d){
 }
 
 // ---- PHOTO SLOT ----
-function openLightbox(src, label){
-  const lb=document.getElementById('lightbox');
+function openLightbox(src,label){
   document.getElementById('lightbox-img').src=src;
-  document.getElementById('lightbox-label').textContent=label||'';
-  lb.classList.add('active');
-  document.body.style.overflow='hidden';
+  document.getElementById('lightbox').classList.add('open');
 }
-function closeLightbox(){
-  document.getElementById('lightbox').classList.remove('active');
-  document.body.style.overflow='';
+function closeLightbox(e){
+  if(!e||e.target===document.getElementById('lightbox'))
+    document.getElementById('lightbox').classList.remove('open');
 }
-// Close on Escape key
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLightbox();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.getElementById('lightbox').classList.remove('open');});
 
 function renderPhotoSlot(slotId,label,driveId){
   return `<div class="photo-slot" id="slot-${slotId}" data-slot="${slotId}">
@@ -1007,25 +1003,31 @@ document.addEventListener('click',function(e){
   if(!slot)return;
   const slotId=slot.dataset.slot;
   if(!slotId)return;
-  // If slot has <img> with src -> open lightbox
-  const img=slot.querySelector('img');
-  if(img&&img.src&&img.src!==window.location.href&&!img.src.endsWith('#')){
-    const label=slot.querySelector('.photo-label-overlay,.photo-label')?.textContent||slotId;
-    openLightbox(img.src,label);
-    return;
-  }
-  // Check background-image (old style slots)
-  const bg=slot.style.backgroundImage;
-  if(bg&&bg!=='none'&&bg!==''){
-    const url=bg.replace(/^url\(["']?/,'').replace(/["']?\)$/,'');
-    const label=slot.querySelector('.photo-label-overlay,.photo-label')?.textContent||slotId;
-    openLightbox(url,label);
+  // Check if slot has a photo (by driveId stored on slot)
+  const driveId=slot.getAttribute('data-drive-id');
+  if(driveId){
+    openPhotoLightbox(driveId);
     return;
   }
   // No image -> upload
   currentPhotoSlot=slotId;
   document.getElementById('camera-input').click();
-},true); // useCapture=true to fire before other handlers
+},true);
+
+async function openPhotoLightbox(driveId){
+  const lb=document.getElementById('lightbox');
+  const img=document.getElementById('lightbox-img');
+  img.src='';
+  lb.classList.add('open');
+  img.alt='Loading...';
+  try{
+    const token=await ensureToken();
+    const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
+    const blob=await res.blob();
+    img.src=URL.createObjectURL(blob);
+    img.alt='Photo';
+  }catch(e){console.error('Lightbox load error:',e);lb.classList.remove('open');}
+}
 
 document.getElementById('camera-input').onchange=handlePhotoInput;
 document.getElementById('photo-input').onchange=handlePhotoInput;
