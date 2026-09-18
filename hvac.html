@@ -180,9 +180,8 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 </div>
 
 <!-- Hidden file inputs -->
-<input type="file" id="photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(event)"/>
-<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhotoInput(event)"/>
-<input type="file" id="file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(event)"/>
+<input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none"/>
+<input type="file" id="file-input" accept="image/*" style="display:none"/>
 
 <script>
 // ========== CONFIG ==========
@@ -241,14 +240,32 @@ function today(){return new Date().toLocaleDateString('de-DE');}
 function todayISO(){return new Date().toISOString().slice(0,10);}
 
 // ========== TABS ==========
-function showTab(tab){
+function showTab(tab,pushHistory=true){
   document.getElementById('view-overview').style.display=tab==='overview'?'':'none';
   document.getElementById('view-test').style.display=tab==='test'?'':'none';
   document.getElementById('tab-overview').classList.toggle('active',tab==='overview');
   document.getElementById('tab-test').classList.toggle('active',tab==='test');
   document.getElementById('tab-test').style.display=tab==='test'?'':'none';
   if(tab==='overview')renderMatrix();
+  // Push history so device back button works
+  if(pushHistory){
+    if(tab==='test') window.history.pushState({view:'test'},'','');
+    else window.history.replaceState({view:'overview'},'','');
+  }
 }
+
+// Handle device back button
+window.addEventListener('popstate',function(e){
+  // If lightbox open - close it
+  const lb=document.getElementById('lightbox');
+  if(lb&&lb.classList.contains('open')){lb.classList.remove('open');window.history.pushState({view:'test'},'','');return;}
+  // If photo modal open - close it
+  const pm=document.getElementById('photo-modal');
+  if(pm&&pm.style.display==='flex'){pm.style.display='none';window.history.pushState({view:'test'},'','');return;}
+  // If on test form - go back to overview
+  const testView=document.getElementById('view-test');
+  if(testView&&testView.style.display!=='none'){showTab('overview',false);return;}
+});
 
 // ========== PROJECT CHANGE ==========
 function onProjectChange(){
@@ -1038,8 +1055,8 @@ async function openPhotoLightbox(driveId){
   }catch(e){console.error('Lightbox load error:',e);lb.classList.remove('open');}
 }
 
-document.getElementById('camera-input').onchange=handlePhotoInput;
-document.getElementById('photo-input').onchange=handlePhotoInput;
+document.getElementById('camera-input').addEventListener('change',handlePhotoInput);
+document.getElementById('file-input').addEventListener('change',handlePhotoInput);
 
 async function handlePhotoInput(e){
   const file=e.target.files[0];
