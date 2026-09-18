@@ -128,7 +128,12 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .back-btn:hover{text-decoration:underline;}
 
 /* RESPONSIVE */
-@media(max-width:600px){
+    /* Lightbox */
+    .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;align-items:center;justify-content:center;}
+    .lightbox.open{display:flex;}
+    .lightbox img{max-width:92%;max-height:92%;border-radius:8px;object-fit:contain;}
+    .lightbox-close{position:absolute;top:16px;right:20px;color:#fff;font-size:36px;cursor:pointer;background:none;border:none;line-height:1;}
+    @media(max-width:600px){
   .form-grid{grid-template-columns:1fr;}
   .form-grid.cols3{grid-template-columns:1fr 1fr;}
   .topbar-controls{width:100%;}
