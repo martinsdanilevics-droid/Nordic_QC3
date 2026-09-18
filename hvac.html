@@ -1193,8 +1193,11 @@ function updateDiffs(){
     const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
     setDiffCell('diff-p1',d1,0);
     setDiffCell('diff-p2',d2,0);
-    const passed=d1!==null&&d2!==null&&d1===0&&d2===0;
-    const failed=d1!==null&&d2!==null&&(d1!==0||d2!==0);
+    // Passed if at least Part I is filled and all filled parts are 0
+    const anyFilled=d1!==null||d2!==null;
+    const anyFailed=(d1!==null&&d1!==0)||(d2!==null&&d2!==0);
+    const passed=anyFilled&&!anyFailed;
+    const failed=anyFilled&&anyFailed;
     setResult(passed,failed);
   }
   if(t==='QC-4.2'){
@@ -1206,7 +1209,7 @@ function updateDiffs(){
     const failed=diff!==null&&Math.abs(diff)>1;
     setResult(passed,failed);
   }
-  if(t==='QC-5.0'){
+  if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
     const hs=parseFloat(document.getElementById('f-hot-ps')?.value);
     const he=parseFloat(document.getElementById('f-hot-pe')?.value);
     const cs=parseFloat(document.getElementById('f-cold-ps')?.value);
