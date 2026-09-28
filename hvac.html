@@ -146,7 +146,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
   <div class="topbar-inner">
     <div>
       <div class="topbar-title">🏠 Nordic Homes</div>
-      <div class="topbar-sub">HVAC Pressure Tests</div>
+      <div class="topbar-sub">HVAC Pressure Tests · <span id="app-version"></span></div>
     </div>
     <div class="topbar-controls">
       <select class="top-sel" id="project-sel" onchange="onProjectChange()">
@@ -421,6 +421,12 @@ function updateConnectBtn(){
 }
 
 // ========== INIT (handle OAuth redirect — PKCE) ==========
+(function showVersion(){
+  const d=new Date(document.lastModified);
+  const pad=n=>String(n).padStart(2,'0');
+  const el=document.getElementById('app-version');
+  if(el&&!isNaN(d))el.textContent=`upd. ${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+})();
 (async()=>{
   try{
     const last=localStorage.getItem('hvac_last_project');
@@ -802,6 +808,13 @@ async function clearNA(mod,tk){
   const modData=(testsData[currentProject]||{})[mod]||{};
   // Find every N/A entry for this test type (also older ones saved under another key)
   const naEntries=Object.entries(modData).filter(([k,v])=>v&&v.data&&v.data.test_type===tk&&v.data.result==='N/A');
+  // Also any duplicate N/A files for the same cell (e.g. N/A pressed twice) — only one of them is shown
+  const files=fileCache[currentProject]||{};
+  Object.entries(files).forEach(([id,f])=>{
+    const d=f&&f.data;
+    if(d&&d.module===mod&&d.test_type===tk&&d.result==='N/A'&&!naEntries.some(([k,v])=>v.fileId===id))
+      naEntries.push([tk+'|N/A',{fileId:id,fileName:f.name,data:d}]);
+  });
   // Remove from screen immediately
   naEntries.forEach(([k,v])=>{delete modData[k];notePending(mod,k,'del',v);});
   setStatus('Removing N/A...');
@@ -811,6 +824,7 @@ async function clearNA(mod,tk){
       if(v.fileId){
         try{await graphRequest(`/me/drive/items/${v.fileId}`,{method:'DELETE'});}
         catch(e){if(!/Graph 404/.test(e.message))throw e;} // already gone is fine
+        delete files[v.fileId]; // don't bring it back from cache if search still lists it
       }
     }
     saveToCache();
