@@ -530,9 +530,7 @@ async function loadModuleFromDrive(modName){
     driveFileIds[modName]=fileId;
     // Load JSON content directly using fileId
     if(true){
-      const content=await graphRequest(`/me/drive/items/${fileId}/content`);
-      const text=await content.text();
-      const saved=JSON.parse(text);
+      const saved=await graphRequest(`/me/drive/items/${fileId}/content`);
       if(saved&&saved.items){
         saved.items.forEach(si=>{
           const cur=modules[modName].items.find(i=>i.id===si.id);
