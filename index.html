@@ -445,7 +445,8 @@ async function initAuth(){
 async function onConnected(){
   msConnected=true;
   updateDriveUI(true);
-  await fetchMsUserEmail();
+  // User email (for restricted mode) loads in parallel with module data
+  fetchMsUserEmail().then(()=>{if(currentModule)render();});
   await ensureProjectFolderAndLoad();
 }
 
@@ -471,93 +472,210 @@ async function ensureFolder(parentId,name){
   return created;
 }
 
+// Root + project folder are created once per project and memoized,
+// so they no longer block module loading.
+let rootFoldersPromise=null;
+function ensureRootFolders(){
+  if(!rootFoldersPromise){
+    const cfg=getProjectCfg();
+    rootFoldersPromise=(async()=>{
+      const root=await ensureFolder('root','Nordic_QC3');
+      rootFolderId=root.id;
+      const projFolder=await ensureFolder(rootFolderId,cfg.folder);
+      if(cfg===getProjectCfg()){
+        document.getElementById('drive-folder-name').textContent=cfg.folder;
+        document.getElementById('drive-folder-link').innerHTML=`<a href="${projFolder.webUrl}" target="_blank">Open in OneDrive</a>`;
+      }
+      return projFolder;
+    })().catch(e=>{rootFoldersPromise=null;throw e;});
+  }
+  return rootFoldersPromise;
+}
+
 async function ensureProjectFolderAndLoad(){
-  setStatus('Setting up OneDrive folder...');
-  try{
-    // Root folder: Nordic_QC3
-    const root=await ensureFolder('root','Nordic_QC3');
-    rootFolderId=root.id;
-    // Project subfolder
-    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
-    document.getElementById('drive-folder-name').textContent=getProjectCfg().folder;
-    document.getElementById('drive-folder-link').innerHTML=`<a href="${projFolder.webUrl}" target="_blank">Open in OneDrive</a>`;
-    moduleFolderIds={};
-    driveFileIds={};
-    await loadAllFromDrive();
-  }catch(e){setStatus('OneDrive error: '+e.message);console.error(e);}
+  moduleFolderIds={};
+  driveFileIds={};
+  rootFoldersPromise=null;
+  ensureRootFolders().catch(e=>{setStatus('OneDrive error: '+e.message);console.error(e);});
+  await loadAllFromDrive();
 }
 
 async function ensureModuleFolder(modName){
   if(moduleFolderIds[modName])return moduleFolderIds[modName];
-  const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
+  const projFolder=await ensureRootFolders();
   const modFolder=await ensureFolder(projFolder.id,modName);
   moduleFolderIds[modName]=modFolder.id;
   return modFolder.id;
 }
 
+// ---- LOCAL CACHE ----
+// Own key: the ISL/GER app runs on the same github.io origin and uses 'qc_modules_cache_v1'
+const LOCAL_CACHE_KEY='qc3_onedrive_cache_v1';
+let driveETags={};          // modName -> eTag of the JSON version currently shown
+let dirtyModules=new Set(); // modules with local changes not yet saved to OneDrive
+let editSeq={};             // modName -> edit counter (so a save doesn't clear newer edits)
+let lastSyncAt=0;
+let syncGen=0;
+
+function moduleFileName(modName){return `qc_${modName.replace(/[ -]/g,'')}.json`;}
+
+function modulePayload(modName){
+  const m=modules[modName];
+  return {
+    meta:m.meta,
+    items:m.items.map(i=>({
+      id:i.id,section:i.section,desc:i.desc,status:i.status,
+      notes:i.notes,acceptedDate:i.acceptedDate,rejectedDate:i.rejectedDate,
+      filledBy:i.filledBy||'',photoIds:(i.photoIds||[]).filter(Boolean)
+    }))
+  };
+}
+
+// Applies saved JSON (from OneDrive or cache) onto a fresh template
+function applySavedToModule(modName,saved){
+  const mod=modules[modName];
+  if(!mod||!saved)return;
+  const items=freshItems();
+  (saved.items||[]).forEach(si=>{
+    const ids=(si.photoIds||[]).filter(Boolean);
+    const previews=ids.map(did=>({previewId:did,driveId:did,uploading:false,dataUrl:''}));
+    const cur=items.find(i=>i.id===si.id);
+    if(cur){
+      // Only trust saved data if the description still matches the template item
+      if(!si.desc||si.desc===cur.desc){
+        cur.status=si.status||'pending';
+        cur.notes=si.notes||'';
+        cur.acceptedDate=si.acceptedDate||'';
+        cur.rejectedDate=si.rejectedDate||'';
+        cur.filledBy=si.filledBy||'';
+        cur.photoIds=ids;
+        cur.photoPreviews=previews;
+      }
+    }else{
+      // Custom item added via "Add item" — keep it
+      items.push({...si,status:si.status||'pending',notes:si.notes||'',acceptedDate:si.acceptedDate||'',
+        rejectedDate:si.rejectedDate||'',filledBy:si.filledBy||'',photoIds:ids,photoPreviews:previews});
+    }
+  });
+  items.sort((a,b)=>a.id-b.id);
+  mod.items=items;
+  if(saved.meta)mod.meta=saved.meta;
+}
+
+function saveToLocalCache(){
+  try{
+    const cache={v:1,project:currentProject,module:currentModule,modules:{},etags:driveETags,dirty:[...dirtyModules]};
+    Object.keys(modules).forEach(k=>{cache.modules[k]=modulePayload(k);});
+    localStorage.setItem(LOCAL_CACHE_KEY,JSON.stringify(cache));
+  }catch(e){console.warn('Local cache save error:',e);}
+}
+
+function restoreFromLocalCache(){
+  try{
+    const raw=localStorage.getItem(LOCAL_CACHE_KEY);
+    if(!raw)return null;
+    const cache=JSON.parse(raw);
+    if(!cache||cache.v!==1)return null;
+    Object.entries(cache.modules||{}).forEach(([k,v])=>{if(modules[k])applySavedToModule(k,v);});
+    driveETags=cache.etags||{};
+    dirtyModules=new Set(cache.dirty||[]);
+    return cache;
+  }catch(e){console.warn('Local cache restore error:',e);return null;}
+}
+
+function hasUploadingPhotos(modName){
+  return (modules[modName]?.items||[]).some(i=>(i.photoPreviews||[]).some(p=>p.uploading));
+}
+
 // ---- LOAD/SAVE ----
+// All modules are checked in parallel; a module's JSON is only downloaded
+// when its eTag differs from the cached version.
 async function loadAllFromDrive(){
-  setStatus('Loading modules from OneDrive...');
-  for(const modName of getProjectCfg().modules){
-    await loadModuleFromDrive(modName);
-  }
-  setStatus('All modules loaded ✓');
-  if(currentModule)render();
+  const gen=++syncGen;
+  const mods=getProjectCfg().modules.slice();
+  setStatus('Syncing with OneDrive...');
+  const changed=[];let failed=0;
+  await Promise.all(mods.map(m=>loadModuleFromDrive(m)
+    .then(c=>{if(c)changed.push(m);})
+    .catch(e=>{failed++;console.warn('Load error for '+m,e);})));
+  lastSyncAt=Date.now();
+  saveToLocalCache();
+  if(gen!==syncGen)return; // project switched meanwhile
+  if(currentModule&&changed.includes(currentModule))render();
+  else loadThumbnails();
   renderOverview();
+  setStatus(failed?`Synced — ${failed} module(s) failed to load`:'All modules loaded ✓');
+  // Push local changes that never reached OneDrive (e.g. app closed before save)
+  if(mods.some(m=>dirtyModules.has(m)))flushDirty();
 }
 
 async function loadModuleFromDrive(modName){
+  const projCfg=getProjectCfg();
+  let meta;
   try{
-    const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
-    // Find module folder using path-based access (more reliable than $filter with spaces)
-    const projCfg=getProjectCfg();
-    let modFolderId=null;
-    try{
-      const modFolderRes=await graphRequest(`/me/drive/root:/Nordic_QC3/${projCfg.folder}/${modName}?$select=id,name`);
-      if(modFolderRes&&modFolderRes.id){
-        modFolderId=modFolderRes.id;
-        moduleFolderIds[modName]=modFolderId;
+    meta=await graphRequest(`/me/drive/root:/Nordic_QC3/${projCfg.folder}/${modName}/${moduleFileName(modName)}?$select=id,eTag,parentReference`);
+  }catch(e){
+    if(/Graph 404/.test(e.message))return false; // no JSON (or folder) yet
+    throw e;
+  }
+  if(!meta||!meta.id)return false;
+  driveFileIds[modName]=meta.id;
+  if(meta.parentReference&&meta.parentReference.id)moduleFolderIds[modName]=meta.parentReference.id;
+  if(dirtyModules.has(modName))return false;               // local unsaved changes win
+  if(meta.eTag&&driveETags[modName]===meta.eTag)return false; // unchanged since cached
+  let saved=await graphRequest(`/me/drive/items/${meta.id}/content`);
+  if(saved&&typeof saved.text==='function')saved=JSON.parse(await saved.text()); // non-JSON content-type from download redirect
+  else if(typeof saved==='string')saved=JSON.parse(saved);
+  // User may have started editing while we were downloading
+  if(dirtyModules.has(modName)||hasUploadingPhotos(modName))return false;
+  applySavedToModule(modName,saved);
+  driveETags[modName]=meta.eTag||'';
+  return true;
+}
+
+async function saveModuleToDrive(modName){
+  const seq=editSeq[modName]||0;
+  const body=JSON.stringify(modulePayload(modName));
+  const opts={method:'PUT',headers:{'Content-Type':'application/json'},body};
+  let res;
+  if(driveFileIds[modName]){
+    res=await graphRequest(`/me/drive/items/${driveFileIds[modName]}/content`,opts);
+  }else{
+    const modFolderId=await ensureModuleFolder(modName);
+    res=await graphRequest(`/me/drive/items/${modFolderId}:/${moduleFileName(modName)}:/content`,opts);
+  }
+  if(res&&res.id)driveFileIds[modName]=res.id;
+  if(res&&res.eTag)driveETags[modName]=res.eTag;
+  if((editSeq[modName]||0)===seq)dirtyModules.delete(modName);
+  saveToLocalCache();
+}
+
+let flushing=false,flushAgain=false;
+async function flushDirty(){
+  if(!msConnected)return;
+  if(flushing){flushAgain=true;return;}
+  flushing=true;
+  try{
+    do{
+      flushAgain=false;
+      const list=[...dirtyModules].filter(m=>modules[m]);
+      if(!list.length)break;
+      setStatus('Saving...');
+      for(const m of list){
+        if(hasUploadingPhotos(m))continue; // saved again after upload finishes
+        await saveModuleToDrive(m);
       }
-    }catch(e){return;} // Module folder doesn't exist yet
-    if(!modFolderId)return;
-    // Get JSON file directly by path
-    let fileId=null;
-    try{
-      const fileRes=await graphRequest(`/me/drive/root:/Nordic_QC3/${projCfg.folder}/${modName}/${fname}?$select=id,name`);
-      if(fileRes&&fileRes.id)fileId=fileRes.id;
-    }catch(e){return;} // JSON not found yet
-    if(!fileId)return;
-    driveFileIds[modName]=fileId;
-    // Load JSON content directly using fileId
-    if(true){
-      const saved=await graphRequest(`/me/drive/items/${fileId}/content`);
-      if(saved&&saved.items){
-        saved.items.forEach(si=>{
-          const cur=modules[modName].items.find(i=>i.id===si.id);
-          if(cur){
-            const descMatches=!si.desc||si.desc===cur.desc;
-            if(descMatches){
-              cur.status=si.status||'pending';
-              cur.notes=si.notes||'';
-              cur.acceptedDate=si.acceptedDate||'';
-              cur.rejectedDate=si.rejectedDate||'';
-              cur.filledBy=si.filledBy||'';
-              const ids=(si.photoIds||[]).filter(Boolean);
-              cur.photoIds=ids;
-              cur.photoPreviews=ids.map(did=>({previewId:did,driveId:did,uploading:false,dataUrl:''}));
-            }
-          }
-        });
-      }
-      if(saved&&saved.meta)modules[modName].meta=saved.meta;
-      ITEMS_TEMPLATE.forEach(ti=>{
-        if(!modules[modName].items.find(i=>i.id===ti.id)){
-          modules[modName].items.push({...ti,status:'pending',notes:'',acceptedDate:'',rejectedDate:'',filledBy:'',photoIds:[],photoPreviews:[]});
-        }
-      });
-      modules[modName].items.sort((a,b)=>a.id-b.id);
-    }
-  }catch(e){console.warn('Load error for '+modName,e);}
+      setStatus('Saved ✓ '+new Date().toLocaleTimeString());
+      renderOverview();
+    }while(flushAgain);
+  }catch(e){setStatus('Save error: '+e.message);}
+  finally{flushing=false;}
+}
+
+function markDirty(modName){
+  if(!modName)return;
+  dirtyModules.add(modName);
+  editSeq[modName]=(editSeq[modName]||0)+1;
 }
 
 async function saveToDrive(){
@@ -566,37 +684,10 @@ async function saveToDrive(){
   modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
   modules[currentModule].meta.pm=document.getElementById('pm-input').value;
   modules[currentModule].meta.date=document.getElementById('date-input').value;
-  setStatus('Saving...');
-  try{
-    const modName=currentModule;
-    const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
-    const payload={
-      meta:modules[modName].meta,
-      items:modules[modName].items.map(i=>({
-        id:i.id,section:i.section,desc:i.desc,status:i.status,
-        notes:i.notes,acceptedDate:i.acceptedDate,rejectedDate:i.rejectedDate,
-        filledBy:i.filledBy||'',photoIds:(i.photoIds||[]).filter(Boolean)
-      }))
-    };
-    const body=JSON.stringify(payload);
-    const modFolderId=await ensureModuleFolder(modName);
-    if(driveFileIds[modName]){
-      await graphRequest(`/me/drive/items/${driveFileIds[modName]}/content`,{
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body
-      });
-    } else {
-      const res=await graphRequest(`/me/drive/items/${modFolderId}:/${fname}:/content`,{
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body
-      });
-      driveFileIds[modName]=res.id;
-    }
-    setStatus('Saved ✓ '+new Date().toLocaleTimeString());
-    renderOverview();
-  }catch(e){setStatus('Save error: '+e.message);}
+  markDirty(currentModule);
+  saveToLocalCache();
+  clearTimeout(autoSaveTimer);
+  await flushDirty();
 }
 
 // ---- PHOTO UPLOAD ----
@@ -742,22 +833,42 @@ function render(){
   updateStats();
 }
 
-async function loadThumbnails(){
-  if(!msConnected)return;
-  const token=await ensureToken().catch(()=>null);
-  if(!token)return;
-  const imgs=document.querySelectorAll('img[data-id]');
-  imgs.forEach(img=>{
+// Thumbnails: in-memory (per session) + Cache Storage (survives reloads).
+// OneDrive item ids are immutable per photo, so cached thumbs never go stale.
+const THUMB_CACHE='qc3-thumbs-v1';
+const thumbMem=new Map(); // driveId -> Promise<blobUrl|null>
+let thumbCachePromise=null;
+function openThumbCache(){
+  if(!thumbCachePromise)thumbCachePromise=('caches' in window)?caches.open(THUMB_CACHE).catch(()=>null):Promise.resolve(null);
+  return thumbCachePromise;
+}
+function getThumbUrl(id){
+  if(thumbMem.has(id))return thumbMem.get(id);
+  const p=(async()=>{
+    const key=`https://qc3-thumbs.local/${id}`;
+    const cache=await openThumbCache();
+    let blob=null;
+    if(cache){const hit=await cache.match(key);if(hit)blob=await hit.blob();}
+    if(!blob){
+      if(!msConnected)return null;
+      const token=await ensureToken();
+      const r=await fetch(`${GRAPH_BASE}/me/drive/items/${id}/thumbnails/0/medium/content`,{headers:{Authorization:`Bearer ${token}`}});
+      if(!r.ok)throw new Error('thumb '+r.status);
+      blob=await r.blob();
+      if(cache)cache.put(key,new Response(blob,{headers:{'Content-Type':blob.type||'image/jpeg'}})).catch(()=>{});
+    }
+    return URL.createObjectURL(blob);
+  })();
+  thumbMem.set(id,p);
+  p.then(u=>{if(!u)thumbMem.delete(id);}).catch(()=>thumbMem.delete(id));
+  return p;
+}
+
+function loadThumbnails(){
+  document.querySelectorAll('img[data-id]').forEach(img=>{
     const id=img.getAttribute('data-id');
     if(!id||img.src.startsWith('blob:'))return;
-    fetch(`${GRAPH_BASE}/me/drive/items/${id}/thumbnails/0/medium/content`,{
-      headers:{Authorization:`Bearer ${token}`}
-    }).then(r=>{
-      if(!r.ok)throw new Error('thumb '+r.status);
-      return r.blob();
-    }).then(blob=>{
-      img.src=URL.createObjectURL(blob);
-    }).catch(e=>{
+    getThumbUrl(id).then(url=>{if(url)img.src=url;}).catch(e=>{
       console.warn('Thumbnail error for',id,e.message);
       img.style.background='#f0f0f0';
     });
@@ -765,13 +876,17 @@ async function loadThumbnails(){
 }
 
 async function openOneDrivePhoto(driveId){
+  const lbImg=document.getElementById('lightbox-img');
+  // Show the cached thumbnail instantly, then swap in the full photo
+  const thumbEl=document.querySelector(`img[data-id="${driveId}"]`);
+  lbImg.src=thumbEl&&thumbEl.src.startsWith('blob:')?thumbEl.src:'';
+  document.getElementById('lightbox').classList.add('open');
   try{
     const token=await ensureToken();
     const res=await fetch(`${GRAPH_BASE}/me/drive/items/${driveId}/content`,{headers:{Authorization:`Bearer ${token}`}});
+    if(!res.ok)throw new Error('photo '+res.status);
     const blob=await res.blob();
-    const url=URL.createObjectURL(blob);
-    document.getElementById('lightbox-img').src=url;
-    document.getElementById('lightbox').classList.add('open');
+    lbImg.src=URL.createObjectURL(blob);
   }catch(e){console.error('Open photo error:',e);}
 }
 
@@ -881,11 +996,10 @@ function switchProject(projKey){
     const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);
   });
   initProjectModules(projKey);
-  if(msConnected){
-    moduleFolderIds={};driveFileIds={};
-    ensureProjectFolderAndLoad();
-  }
+  document.getElementById('project-select').value=projKey;
+  if(msConnected)ensureProjectFolderAndLoad();
   renderOverview();
+  saveToLocalCache();
 }
 
 function initProjectModules(projKey){
@@ -911,6 +1025,7 @@ function switchModule(name){
   filter='all';
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.textContent.trim()==='All'));
   render();renderOverview();
+  saveToLocalCache();
 }
 
 function getModState(){return currentModule?modules[currentModule]:null;}
@@ -1118,8 +1233,10 @@ function autoSave(){
     modules[currentModule].meta.pm=document.getElementById('pm-input').value;
     modules[currentModule].meta.date=document.getElementById('date-input').value;
   }
+  markDirty(currentModule);
+  saveToLocalCache();
   clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>{if(msConnected)saveToDrive();},3000);
+  autoSaveTimer=setTimeout(()=>{if(msConnected)flushDirty();},3000);
 }
 
 // ---- EXPORT PROTOCOL ----
@@ -1205,8 +1322,22 @@ function initDropdown(){
 }
 
 initDropdown();
+(function restoreSession(){
+  const cache=restoreFromLocalCache();
+  if(!cache)return;
+  if(cache.project&&PROJECTS[cache.project]&&cache.project!==currentProject)switchProject(cache.project);
+  if(cache.module&&getProjectCfg().modules.includes(cache.module))switchModule(cache.module);
+  setStatus('Loaded from cache');
+})();
 renderOverview();
 initAuth();
+
+// Background re-sync when returning to the app (cheap: unchanged modules are skipped by eTag)
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible'||!msConnected)return;
+  if(dirtyModules.size)flushDirty();
+  if(Date.now()-lastSyncAt>2*60*1000)loadAllFromDrive();
+});
 </script>
 </body>
 </html>
