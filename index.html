@@ -509,18 +509,28 @@ async function loadAllFromDrive(){
 async function loadModuleFromDrive(modName){
   try{
     const fname=`qc_${modName.replace(/[ -]/g,'')}.json`;
-    // Find module folder (search without creating)
-    const projFolder=await ensureFolder(rootFolderId,getProjectCfg().folder);
-    const modSearch=await graphRequest(`/me/drive/items/${projFolder.id}/children?$filter=name eq '${encodeURIComponent(modName)}'&$select=id,name`);
-    const modFolder=(modSearch.value||[]).find(f=>f.name===modName);
-    if(!modFolder){return;} // Module folder doesn't exist yet, skip
-    moduleFolderIds[modName]=modFolder.id;
-    // Search JSON in module folder
-    const search=await graphRequest(`/me/drive/items/${modFolder.id}/children?$filter=name eq '${fname}'&$select=id,name`);
-    const files=search.value||[];
-    if(files.length>0){
-      driveFileIds[modName]=files[0].id;
-      const content=await graphRequest(`/me/drive/items/${files[0].id}/content`);
+    // Find module folder using path-based access (more reliable than $filter with spaces)
+    const projCfg=getProjectCfg();
+    let modFolderId=null;
+    try{
+      const modFolderRes=await graphRequest(`/me/drive/root:/Nordic_QC3/${projCfg.folder}/${modName}?$select=id,name`);
+      if(modFolderRes&&modFolderRes.id){
+        modFolderId=modFolderRes.id;
+        moduleFolderIds[modName]=modFolderId;
+      }
+    }catch(e){return;} // Module folder doesn't exist yet
+    if(!modFolderId)return;
+    // Get JSON file directly by path
+    let fileId=null;
+    try{
+      const fileRes=await graphRequest(`/me/drive/root:/Nordic_QC3/${projCfg.folder}/${modName}/${fname}?$select=id,name`);
+      if(fileRes&&fileRes.id)fileId=fileRes.id;
+    }catch(e){return;} // JSON not found yet
+    if(!fileId)return;
+    driveFileIds[modName]=fileId;
+    // Load JSON content directly using fileId
+    if(true){
+      const content=await graphRequest(`/me/drive/items/${fileId}/content`);
       const text=await content.text();
       const saved=JSON.parse(text);
       if(saved&&saved.items){
