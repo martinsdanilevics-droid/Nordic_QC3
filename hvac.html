@@ -291,7 +291,9 @@ window.addEventListener('popstate',function(e){
 // ========== PROJECT CHANGE ==========
 function onProjectChange(){
   currentProject=document.getElementById('project-sel').value;
+  try{localStorage.setItem('hvac_last_project',currentProject);}catch(e){}
   folderCache={};
+  if(!loadFromCache())testsData[currentProject]={};
   showTab('overview');
   if(msConnected)loadProjectTests();
 }
@@ -384,11 +386,15 @@ function saveMsTokens(data){
   if(data.refresh_token)localStorage.setItem('hvac_ms_refresh_token',data.refresh_token);
 }
 
+let tokenRefreshPromise=null;
 async function ensureToken(){
   if(msToken&&Date.now()<msTokenExpiry)return msToken;
-  const data=await refreshMsToken();
-  saveMsTokens(data);
-  return msToken;
+  if(!tokenRefreshPromise){
+    tokenRefreshPromise=refreshMsToken()
+      .then(data=>{saveMsTokens(data);return msToken;})
+      .finally(()=>{tokenRefreshPromise=null;});
+  }
+  return tokenRefreshPromise;
 }
 
 async function graphRequest(path,options={}){
@@ -416,6 +422,12 @@ function updateConnectBtn(){
 
 // ========== INIT (handle OAuth redirect — PKCE) ==========
 (async()=>{
+  try{
+    const last=localStorage.getItem('hvac_last_project');
+    const sel=document.getElementById('project-sel');
+    if(last&&[...sel.options].some(o=>o.value===last)){currentProject=last;sel.value=last;}
+  }catch(e){}
+  if(loadFromCache())renderMatrix();
   const url=new URL(window.location.href);
   const code=url.searchParams.get('code');
   if(code){
@@ -519,59 +531,104 @@ async function getModuleHVACFolder(modName,testTypeKey){
 
 // ========== LOAD ALL TESTS FOR PROJECT ==========
 let loadingTests=false;
-// ── CACHE HELPERS ────────────────────────────────────────────────────────────
-function cacheKey(){return `hvac_tests_${currentProject}`;}
+// ── CACHE ────────────────────────────────────────────────────────────────────
+// Per project: the overview data + downloaded JSON per file (by eTag) + local
+// changes that OneDrive search may not show yet (see pendingOps).
+function cacheKey(proj){return `hvac_tests_v2_${proj||currentProject}`;}
+let fileCache={};   // project -> {fileId: {eTag, data, name}}
+let pendingOps={};  // project -> [{mod,key,op:'set'|'del',entry,fileId,at}]
+const PENDING_TTL=10*60*1000; // OneDrive search index can lag several minutes
 
 function saveToCache(){
   try{
-    const payload={ts:Date.now(),data:testsData[currentProject]};
+    const payload={ts:Date.now(),data:testsData[currentProject]||{},files:fileCache[currentProject]||{},pending:pendingOps[currentProject]||[]};
     localStorage.setItem(cacheKey(),JSON.stringify(payload));
+    localStorage.removeItem(`hvac_tests_${currentProject}`); // old cache format
   }catch(e){console.warn('Cache write error',e);}
 }
 
+// Always shows cached data (no age limit) — fresh data replaces it in the background
 function loadFromCache(){
   try{
     const raw=localStorage.getItem(cacheKey());
     if(!raw)return false;
     const payload=JSON.parse(raw);
-    // Use cache up to 10 min old
-    if(Date.now()-payload.ts>120000)return false; // 2 min TTL
     testsData[currentProject]=payload.data||{};
+    fileCache[currentProject]=payload.files||{};
+    pendingOps[currentProject]=(payload.pending||[]).filter(p=>Date.now()-p.at<PENDING_TTL);
     return true;
   }catch(e){return false;}
 }
 
 function clearCache(proj){
-  try{localStorage.removeItem(`hvac_tests_${proj||currentProject}`);}catch(e){}
+  try{localStorage.removeItem(cacheKey(proj));}catch(e){}
+  fileCache[proj||currentProject]={};
 }
 
-// ── FAST LOAD: search for all JSON files under project folder in one call ─────
+// One key per module+test type+system; N/A has its own key
+function entryKey(data){
+  if(data&&data.result==='N/A')return data.test_type+'|N/A';
+  return (data&&data.test_type)+'|'+((data&&data.system_no)||'');
+}
+
+// Remember a local change so a background refresh can't undo it
+function notePending(mod,key,op,entry){
+  const list=(pendingOps[currentProject]=(pendingOps[currentProject]||[]).filter(p=>!(p.mod===mod&&p.key===key)));
+  list.push({mod,key,op,entry:entry||null,fileId:entry&&entry.fileId||null,at:Date.now()});
+}
+function applyPending(fresh){
+  const list=(pendingOps[currentProject]||[]).filter(p=>Date.now()-p.at<PENDING_TTL);
+  pendingOps[currentProject]=list;
+  for(const p of list){
+    if(!fresh[p.mod])fresh[p.mod]={};
+    if(p.op==='set'&&p.entry){
+      // drop any stale copy of the same file under another key
+      for(const [k,v] of Object.entries(fresh[p.mod]))if(v&&p.entry.fileId&&v.fileId===p.entry.fileId&&k!==p.key)delete fresh[p.mod][k];
+      fresh[p.mod][p.key]=p.entry;
+    }else if(p.op==='del'){
+      for(const [k,v] of Object.entries(fresh[p.mod]))if(k===p.key||(p.fileId&&v&&v.fileId===p.fileId))delete fresh[p.mod][k];
+    }
+  }
+}
+
+// If several files map to one cell (e.g. a failed test and its retest), show the newest
+function isNewer(a,b){
+  const ka=(a.data.date||'')+'|'+(a.data.saved_at||''), kb=(b.data.date||'')+'|'+(b.data.saved_at||'');
+  return ka>kb;
+}
+
+// ── LOAD: one search for all JSON, download only files that changed ─────────
+let reloadQueued=false;
 async function loadProjectTests(){
   if(!rootFolderId)return;
-  if(loadingTests)return;
+  if(loadingTests){reloadQueued=true;return;} // run again when the current load ends
   loadingTests=true;
+  reloadQueued=false;
+  const projKey=currentProject;
 
-  // Show cached data immediately
   const hadCache=loadFromCache();
   if(hadCache){
-    setStatus('Loading... (cached)');
+    setStatus('Loaded from cache — syncing...');
     renderMatrix();
   } else {
     setStatus('Loading test data...');
-    testsData[currentProject]={};
-    // Init empty module entries
-    proj().modules.forEach(m=>{testsData[currentProject][m]={};});
+    testsData[projKey]={};
+    fileCache[projKey]={};
+    proj().modules.forEach(m=>{testsData[projKey][m]={};});
     renderMatrix();
   }
 
-  // Background refresh from OneDrive
   try{
     const projFolder=await ensureFolder(rootFolderId,proj().folder);
-    // Search ALL json files under project folder recursively
-    const searchRes=await graphRequest(
-      `/me/drive/items/${projFolder.id}/search(q='.json')?$select=id,name,parentReference&$top=200`
-    );
-    const files=(searchRes.value||[]).filter(f=>
+    // Search ALL json files under the project folder (paged)
+    let files=[];
+    let next=`/me/drive/items/${projFolder.id}/search(q='.json')?$select=id,name,eTag,parentReference&$top=200`;
+    while(next){
+      const res=await graphRequest(next.replace('https://graph.microsoft.com/v1.0',''));
+      files=files.concat(res.value||[]);
+      next=res['@odata.nextLink']||null;
+    }
+    files=files.filter(f=>
       f.name&&f.name.endsWith('.json')&&
       !f.name.startsWith('_')&&
       !f.name.includes('_Deleted')&&
@@ -579,24 +636,43 @@ async function loadProjectTests(){
       !(f.parentReference?.name||'').includes('_Deleted')
     );
 
-    // Reset and re-populate
+    // Download changed files only, 6 at a time
+    const oldFiles=fileCache[projKey]||{};
+    const newFiles={};
+    let i=0;
+    const worker=async()=>{
+      while(i<files.length){
+        const file=files[i++];
+        const cached=oldFiles[file.id];
+        if(cached&&file.eTag&&cached.eTag===file.eTag){newFiles[file.id]=cached;continue;}
+        try{
+          let text=await graphRequest(`/me/drive/items/${file.id}/content`);
+          if(text&&typeof text.text==='function')text=await text.text();
+          const data=typeof text==='string'?JSON.parse(text):text;
+          newFiles[file.id]={eTag:file.eTag||'',data,name:file.name};
+        }catch(e){
+          console.warn('Could not load',file.name,e);
+          if(cached)newFiles[file.id]=cached; // keep last known version
+        }
+      }
+    };
+    await Promise.all(Array.from({length:6},worker));
+    if(projKey!==currentProject){loadingTests=false;loadProjectTests();return;} // project was switched meanwhile
+
     const fresh={};
     proj().modules.forEach(m=>{fresh[m]={};});
-
-    for(const file of files){
-      try{
-        const text=await graphRequest(`/me/drive/items/${file.id}/content`);
-        const data=JSON.parse(typeof text==='string'?text:JSON.stringify(text));
-        const mod=data.module;
-        const tk=data.test_type;
-        if(!mod||!tk||!fresh[mod])continue;
-        const sysNo=data.system_no||'';
-        const key=tk+'|'+sysNo;
-        fresh[mod][key]={fileId:file.id,fileName:file.name,data};
-      }catch(e){console.warn('Could not load',file.name,e);}
+    for(const [fileId,f] of Object.entries(newFiles)){
+      const data=f.data;
+      const mod=data&&data.module, tk=data&&data.test_type;
+      if(!mod||!tk||!fresh[mod])continue;
+      const key=entryKey(data);
+      const entry={fileId,fileName:f.name,data};
+      if(!fresh[mod][key]||isNewer(entry,fresh[mod][key]))fresh[mod][key]=entry;
     }
+    applyPending(fresh);
 
-    testsData[currentProject]=fresh;
+    fileCache[projKey]=newFiles;
+    testsData[projKey]=fresh;
     saveToCache();
     setStatus('Loaded ✓');
     renderMatrix();
@@ -605,6 +681,7 @@ async function loadProjectTests(){
     console.error(e);
   }
   loadingTests=false;
+  if(reloadQueued||projKey!==currentProject){reloadQueued=false;loadProjectTests();}
 }
 
 // ========== OVERVIEW MATRIX ==========
@@ -637,15 +714,14 @@ function renderMatrix(){
       const modData=pd[mod]||{};
       // Collect all entries for this testType (any system_no)
       const entries=Object.entries(modData).filter(([k])=>k===tk+'|'||(k.startsWith(tk+'|')));
-      if(!msConnected){
-        html+=`<td class="cell-empty">—</td>`;
-      } else {
+      const offline=!msConnected;
+      {
         // Check if N/A (key tk+'|')
         const naEntry=modData[tk+'|N/A'];
         const realEntries=entries.filter(([k,v])=>v&&v.data&&v.data.result!=='N/A');
         const hasNA=entries.some(([k,v])=>v&&v.data&&v.data.result==='N/A');
         if(hasNA&&realEntries.length===0){
-          if(isAdmin()){
+          if(isAdmin()&&!offline){
             html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
           } else {
             html+=`<td class="cell-na-set" title="Not applicable">N/A</td>`;
@@ -657,12 +733,14 @@ function renderMatrix(){
             const dateStr=d.date||'';
             const res=d.result||'';
             const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':res==='Pending'?'#e65100':'#999';
-            const sysNo=d.system_no?`<span style="font-size:10px;color:#888">${d.system_no}</span><br>`:'';
+            const sysNo=d.system_no&&d.system_no!=='N/A'?`<span style="font-size:10px;color:#888">${d.system_no}</span><br>`:'';
             const sysNoEnc=encodeURIComponent(d.system_no||'');
             inner+=`<div class="cell-done" onclick="openTestByKey('${mod}','${key}')" style="color:${color};border-bottom:1px solid #eee;padding:2px 0" title="Click to view/edit">${sysNo}${dateStr}<br><span style="font-size:10px">${res}</span></div>`;
           }
-          inner+=`<div style="padding-top:3px"><button class="cell-btn" onclick="startTest('${mod}','${tk}')" style="font-size:10px;padding:2px 6px">+ Add</button></div>`;
+          if(!offline)inner+=`<div style="padding-top:3px"><button class="cell-btn" onclick="startTest('${mod}','${tk}')" style="font-size:10px;padding:2px 6px">+ Add</button></div>`;
           html+=`<td style="padding:4px">${inner}</td>`;
+        } else if(offline){
+          html+=`<td class="cell-empty">—</td>`;
         } else {
           const naBtn=isAdmin()?`<button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>`:'';
           html+=`<td style="white-space:nowrap">
@@ -679,37 +757,74 @@ function renderMatrix(){
 }
 
 // ========== N/A FUNCTIONS ==========
+let naBusy={}; // `${mod}|${tk}` -> true while saving, blocks double taps
 async function setNA(mod,tk){
   if(!msConnected){alert('Connect OneDrive first.');return;}
+  const busyKey=mod+'|'+tk;
+  if(naBusy[busyKey])return;
   if(!confirm(`Mark ${mod} — ${tk} as N/A?`))return;
+  naBusy[busyKey]=true;
   const data={test_type:tk,project:currentProject,module:mod,result:'N/A',date:todayISO(),saved_at:new Date().toISOString()};
+  const naKey=tk+'|N/A';
+  const fname=`${mod.replace(/[ -]/g,'')}_${tk}_NA.json`;
+  if(!testsData[currentProject])testsData[currentProject]={};
+  if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
+  // Show immediately
+  const entry={fileId:null,fileName:fname,data};
+  testsData[currentProject][mod][naKey]=entry;
+  notePending(mod,naKey,'set',entry);
+  setStatus('Saving N/A...');
+  renderMatrix();
   try{
     const folder=await getModuleHVACFolder(mod,tk);
-    const fname=`${mod.replace(/[ -]/g,'')}_${tk}_NA.json`;
     const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    if(!testsData[currentProject])testsData[currentProject]={};
-    if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
-    const naKey=tk+'|N/A';
-    testsData[currentProject][mod][naKey]={fileId:res.id,fileName:fname,data};
+    entry.fileId=res.id;
+    notePending(mod,naKey,'set',entry);
     saveToCache();
     setStatus('Marked as N/A ✓');
+  }catch(e){
+    // Undo on screen
+    delete testsData[currentProject][mod][naKey];
+    pendingOps[currentProject]=(pendingOps[currentProject]||[]).filter(p=>!(p.mod===mod&&p.key===naKey));
+    setStatus('N/A not saved: '+e.message);
+    alert('Could not save N/A — please try again.\n'+e.message);
+  }finally{
+    naBusy[busyKey]=false;
     renderMatrix();
-  }catch(e){setStatus('Error: '+e.message);}
+  }
 }
 
 async function clearNA(mod,tk){
+  const busyKey=mod+'|'+tk;
+  if(naBusy[busyKey])return;
   if(!confirm(`Remove N/A for ${mod} — ${tk}?`))return;
+  naBusy[busyKey]=true;
+  const modData=(testsData[currentProject]||{})[mod]||{};
+  // Find every N/A entry for this test type (also older ones saved under another key)
+  const naEntries=Object.entries(modData).filter(([k,v])=>v&&v.data&&v.data.test_type===tk&&v.data.result==='N/A');
+  // Remove from screen immediately
+  naEntries.forEach(([k,v])=>{delete modData[k];notePending(mod,k,'del',v);});
+  setStatus('Removing N/A...');
+  renderMatrix();
   try{
-    const naKey=tk+'|N/A';
-    const entry=(testsData[currentProject]||{})[mod]?.[naKey];
-    if(entry?.fileId){
-      await graphRequest(`/me/drive/items/${entry.fileId}`,{method:'DELETE'});
+    for(const [k,v] of naEntries){
+      if(v.fileId){
+        try{await graphRequest(`/me/drive/items/${v.fileId}`,{method:'DELETE'});}
+        catch(e){if(!/Graph 404/.test(e.message))throw e;} // already gone is fine
+      }
     }
-    delete testsData[currentProject][mod][naKey];
     saveToCache();
     setStatus('N/A removed ✓');
+  }catch(e){
+    // Put it back on screen
+    naEntries.forEach(([k,v])=>{modData[k]=v;});
+    pendingOps[currentProject]=(pendingOps[currentProject]||[]).filter(p=>!(p.mod===mod&&naEntries.some(([k])=>k===p.key)));
+    setStatus('N/A not removed: '+e.message);
+    alert('Could not remove N/A — please try again.\n'+e.message);
+  }finally{
+    naBusy[busyKey]=false;
     renderMatrix();
-  }catch(e){setStatus('Error: '+e.message);}
+  }
 }
 
 
@@ -1381,11 +1496,13 @@ async function deleteTest(){
       }catch(e){console.warn('Could not move photo',pid,e);}
     }
     // Clear from state
-    const key=currentTestCtx.testType+'|'+(currentTestCtx.data?.system_no||'');
-    if(testsData[currentProject]?.[currentTestCtx.module]){
-      delete testsData[currentProject][currentTestCtx.module][key];
+    const key=entryKey({...(currentTestCtx.data||{}),test_type:currentTestCtx.testType});
+    const modState=testsData[currentProject]?.[currentTestCtx.module];
+    if(modState){
+      for(const [k,v] of Object.entries(modState))if(k===key||(v&&v.fileId===currentTestCtx.fileId))delete modState[k];
     }
-    clearCache();
+    notePending(currentTestCtx.module,key,'del',{fileId:currentTestCtx.fileId});
+    saveToCache();
     setStatus('Moved to _Deleted ✓');
     showTab('overview');
     renderMatrix();
@@ -1422,9 +1539,14 @@ async function _saveData(data){
     currentTestCtx.data=data;
     if(!testsData[currentProject])testsData[currentProject]={};
     if(!testsData[currentProject][currentTestCtx.module])testsData[currentProject][currentTestCtx.module]={};
-    const sKey=currentTestCtx.testType+'|'+(data.system_no||'');
+    const sKey=entryKey({...data,test_type:currentTestCtx.testType});
     currentTestCtx.stateKey=sKey;
-    testsData[currentProject][currentTestCtx.module][sKey]={fileId,fileName:fname,data};
+    const modState=testsData[currentProject][currentTestCtx.module];
+    // if the system no. changed, drop the old cell for this same file
+    for(const [k,v] of Object.entries(modState))if(v&&v.fileId===fileId&&k!==sKey)delete modState[k];
+    const savedEntry={fileId,fileName:currentTestCtx.fileName||fname,data};
+    modState[sKey]=savedEntry;
+    notePending(currentTestCtx.module,sKey,'set',savedEntry);
     saveToCache();
     setStatus('Saved ✓ '+new Date().toLocaleTimeString());
     renderMatrix();
