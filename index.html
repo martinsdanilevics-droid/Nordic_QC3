@@ -378,11 +378,15 @@ function saveTokens(data){
   localStorage.setItem('ms_token_expiry',String(msTokenExpiry));
 }
 
+let tokenRefreshPromise=null;
 async function ensureToken(){
   if(msToken&&Date.now()<msTokenExpiry)return msToken;
-  const data=await refreshAccessToken();
-  saveTokens(data);
-  return msToken;
+  if(!tokenRefreshPromise){
+    tokenRefreshPromise=refreshAccessToken()
+      .then(data=>{saveTokens(data);return msToken;})
+      .finally(()=>{tokenRefreshPromise=null;});
+  }
+  return tokenRefreshPromise;
 }
 
 async function graphRequest(path,options={}){
