@@ -1903,8 +1903,6 @@ function _buildPDFDocument(data,loadedPhotos){
       <div class="person-card"><div class="person-role">Performed by</div><div class="person-name">${data.performed_by||'—'}</div></div>
       <div class="person-card"><div class="person-role">QC Representative</div><div class="person-name">${data.qc_representative}</div></div>
     </div>
-    <div class="sig-line"></div>
-    <div class="sig-label">QC Representative signature</div>
 
     ${data.notes?`<div class="section">Notes</div><p style="font-size:11px;color:#333">${data.notes}</p>`:''}
 
