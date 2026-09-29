@@ -197,6 +197,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
   <!-- TEST FORM TAB -->
   <div id="view-test" style="display:none">
     <button class="back-btn" onclick="showTab('overview')">← Back to Overview</button>
+    <div id="test-file-loc" style="font-size:11px;color:#888;margin:-4px 0 8px;min-height:14px"></div>
     <div id="test-form-content"></div>
   </div>
 
@@ -941,6 +942,7 @@ async function clearNA(mod,tk){
 
 function startTest(mod,testType){
   formDirty=false;
+  const loc=document.getElementById('test-file-loc');if(loc)loc.textContent='';
   currentTestCtx={module:mod,testType,data:null};
   renderTestForm();
   document.getElementById('tab-test').style.display='';
@@ -959,6 +961,28 @@ function openTestByKey(mod,key){
   renderTestForm();
   document.getElementById('tab-test').style.display='';
   showTab('test');
+  showTestFileLocation(currentTestCtx.fileId);
+}
+
+// Shows where the test's JSON file actually is in OneDrive (with a link)
+function safeDec(s){try{return decodeURIComponent(s);}catch(e){return s;}}
+async function showTestFileLocation(fileId){
+  const el=document.getElementById('test-file-loc');
+  if(!el)return;
+  el.textContent='';
+  if(!fileId||!msConnected)return;
+  try{
+    const it=await graphRequest(`/me/drive/items/${fileId}?$select=name,webUrl,parentReference`);
+    if(currentTestCtx.fileId!==fileId)return; // another test was opened meanwhile
+    const path=((it.parentReference&&it.parentReference.path)||'').replace(/^.*?root:\/?/,'').replace(/^\/?Nordic_QC3\/?/,'');
+    const folderUrl=(it.webUrl||'').replace(/\/[^/]*$/,'');
+    const expected=`${currentTestCtx.module} HVAC Tests/${TEST_TYPES[currentTestCtx.testType].folder}`;
+    const wrong=path&&!safeDec(path).endsWith(expected);
+    el.innerHTML=`📁 ${safeDec(path||'')}/${it.name} · <a href="${folderUrl}" target="_blank" style="color:#2d5a3d">Open folder in OneDrive</a>`+
+      (wrong?` <span style="color:#c62828;font-weight:700">⚠ not in the expected folder (${expected})</span>`:'');
+  }catch(e){
+    el.innerHTML=/Graph 404/.test(e.message)?'<span style="color:#c62828">⚠ File not found in OneDrive</span>':'';
+  }
 }
 
 // ========== RENDER TEST FORM ==========
