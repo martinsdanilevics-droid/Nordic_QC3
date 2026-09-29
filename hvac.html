@@ -34,24 +34,42 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 
 /* OVERVIEW MATRIX */
 .matrix-wrap{overflow-x:auto;}
-.matrix-table{border-collapse:collapse;min-width:700px;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
-.matrix-table th{background:#2d5a3d;color:#fff;padding:10px 12px;font-size:12px;text-align:center;white-space:nowrap;}
-.matrix-table th.mod-col{text-align:left;min-width:90px;}
-.matrix-table td{padding:8px 10px;font-size:12px;text-align:center;border-bottom:1px solid #f0f0f0;border-right:1px solid #f0f0f0;}
-.matrix-table td.mod-name{text-align:left;font-weight:600;color:#1a3a2a;background:#f8fdf9;}
-.matrix-table tr:hover td{background:#f0f8f2;}
-.matrix-table tr:hover td.mod-name{background:#e8f5ec;}
-.cell-done{color:#2d5a3d;font-weight:600;cursor:pointer;}
-.cell-done:hover{text-decoration:underline;}
-.cell-empty{color:#bbb;}
-.cell-na{color:#bbb;font-style:italic;}
-.cell-btn{background:none;border:1px solid #2d5a3d;color:#2d5a3d;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;}
-.cell-btn-na{background:none;border:1px solid #bbb;color:#999;border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;margin-left:4px;}
-.cell-btn-na:hover{background:#f5f5f5;color:#666;}
-.cell-na-set{color:#aaa;font-style:italic;font-size:12px;cursor:pointer;}
-.cell-na-set:hover{color:#666;}
-
-/* GROUP HEADER ROW */
+.matrix-table{border-collapse:separate;border-spacing:0;min-width:760px;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
+.matrix-table th{background:#2d5a3d;color:#fff;padding:9px 8px;font-size:12px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;}
+.matrix-table th .th-sub{display:block;font-weight:400;font-size:10px;opacity:.85;}
+.matrix-table th .th-count{display:inline-block;margin-top:4px;font-size:10px;font-weight:600;background:rgba(255,255,255,.18);border-radius:8px;padding:1px 7px;}
+.matrix-table th.mod-col{text-align:left;min-width:96px;left:0;z-index:3;}
+.matrix-table td{padding:3px;font-size:12px;text-align:center;border-bottom:1px solid #eef0ee;border-right:1px solid #eef0ee;vertical-align:middle;height:52px;}
+.matrix-table td.mod-name{text-align:left;font-weight:700;color:#1a3a2a;background:#f8fdf9;padding:6px 10px;position:sticky;left:0;z-index:1;white-space:nowrap;}
+.mod-prog{display:block;font-size:10px;font-weight:600;color:#6b8a76;margin-top:2px;}
+.mod-prog.all{color:#2e7d32;}
+.mod-bar{height:3px;background:#e3ece6;border-radius:2px;margin-top:3px;overflow:hidden;}
+.mod-bar>div{height:100%;background:#2e7d32;}
+/* status tiles fill the cell */
+.tile{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:44px;border-radius:6px;cursor:pointer;padding:4px 20px;box-sizing:border-box;line-height:1.25;}
+.tile+.tile{margin-top:3px;}
+.tile .t-res{font-weight:700;font-size:12px;}
+.tile .t-date{font-size:11px;opacity:.85;}
+.tile .t-sys{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;opacity:.75;}
+.tile.passed{background:#dff2e3;color:#1f6b2a;border:1px solid #b8e0c0;}
+.tile.failed{background:#fde4e4;color:#b3261e;border:1px solid #f4b8b5;}
+.tile.pending{background:#fff1d6;color:#9a5a00;border:1px solid #f3d49a;}
+.tile.incomplete{background:#fff8e8;color:#9a6a00;border:1px dashed #e6c77a;}
+.tile.na{background:repeating-linear-gradient(135deg,#f3f3f3 0 6px,#ececec 6px 12px);color:#8a8a8a;border:1px solid #e2e2e2;font-style:italic;}
+.tile.na .t-res{font-weight:600;}
+.tile:hover{filter:brightness(.97);}
+.tile .t-add{position:absolute;top:2px;right:3px;width:18px;height:18px;border-radius:50%;border:1px solid currentColor;background:rgba(255,255,255,.7);color:inherit;font-size:13px;line-height:15px;padding:0;cursor:pointer;opacity:.6;}
+.tile .t-add:hover{opacity:1;}
+.tile .t-x{position:absolute;top:2px;right:5px;font-size:11px;opacity:.6;}
+.empty-cell{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;}
+.cell-btn{background:#fff;border:1px solid #9fbfaa;color:#2d5a3d;border-radius:14px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.cell-btn:hover{background:#eef7f1;border-color:#2d5a3d;}
+.cell-btn-na{background:none;border:none;color:#aaa;font-size:11px;cursor:pointer;text-decoration:underline;padding:4px 2px;}
+.cell-btn-na:hover{color:#666;}
+.cell-empty{color:#ccc;}
+.matrix-legend{display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:11px;color:#666;margin:0 0 8px;}
+.matrix-legend span{display:inline-flex;align-items:center;gap:5px;}
+.matrix-legend i{display:inline-block;width:14px;height:14px;border-radius:3px;}
 .matrix-table tr.group-row td{background:#e8f5ec;font-weight:700;font-size:12px;color:#1a3a2a;padding:6px 12px;letter-spacing:0.3px;}
 
 /* TEST FORM */
@@ -696,71 +714,80 @@ function renderMatrix(){
   const mods=proj().modules;
   const tks=Object.keys(TEST_TYPES);
   const pd=testsData[currentProject]||{};
+  const offline=!msConnected;
+  const admin=isAdmin();
+  const shortNames={'QC-4.0':'Underfloor Heating','QC-4.1':'Radiator Heating','QC-4.2':'Sewer Hydraulic',
+    'QC-5.0':'Water Concealed Wall','QC-5.1':'Water Collector','QC-5.2':'Water Full System'};
+  const fmtDate=s=>{const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?`${m[3]}.${m[2]}.${m[1].slice(2)}`:(s||'');};
 
-  let html=`<table class="matrix-table">
-    <thead><tr>
-      <th class="mod-col">Module</th>`;
-  const shortNames={
-    'QC-4.0':'Underfloor\nHeating',
-    'QC-4.1':'Radiator\nHeating',
-    'QC-4.2':'Sewer\nHydraulic',
-    'QC-5.0':'Water\nConcealed Wall',
-    'QC-5.1':'Water\nCollector',
-    'QC-5.2':'Water\nFull System'
+  // Status of one cell: 'na' | 'done' (all systems passed) | 'open' | 'empty'
+  const cellInfo=(mod,tk)=>{
+    const modData=pd[mod]||{};
+    const entries=Object.entries(modData).filter(([k,v])=>k.startsWith(tk+'|')&&v&&v.data);
+    const real=entries.filter(([k,v])=>v.data.result!=='N/A');
+    const na=entries.some(([k,v])=>v.data.result==='N/A');
+    let state='empty';
+    if(real.length)state=real.every(([k,v])=>v.data.result==='Passed')?'done':'open';
+    else if(na)state='na';
+    return {real,na,state};
   };
+
+  // header with per-column progress
+  let html=`<div class="matrix-legend">
+    <span><i style="background:#dff2e3;border:1px solid #b8e0c0"></i>Passed</span>
+    <span><i style="background:#fde4e4;border:1px solid #f4b8b5"></i>Failed</span>
+    <span><i style="background:#fff1d6;border:1px solid #f3d49a"></i>Pending / incomplete</span>
+    <span><i style="background:repeating-linear-gradient(135deg,#f3f3f3 0 4px,#e6e6e6 4px 8px);border:1px solid #e2e2e2"></i>N/A</span>
+    <span><i style="background:#fff;border:1px solid #ddd"></i>Not tested</span>
+  </div>`;
+  html+=`<table class="matrix-table"><thead><tr><th class="mod-col">Module</th>`;
   for(const tk of tks){
-    const sub=(shortNames[tk]||'').replace('\\n','<br>');
-    html+=`<th>${tk}<br><span style="font-weight:400;font-size:10px;opacity:0.85">${sub}</span></th>`;
+    const need=mods.filter(m=>cellInfo(m,tk).state!=='na');
+    const done=need.filter(m=>cellInfo(m,tk).state==='done').length;
+    const cnt=need.length?`<span class="th-count">${done}/${need.length}</span>`:`<span class="th-count">N/A</span>`;
+    html+=`<th>${tk}<span class="th-sub">${shortNames[tk]||''}</span>${cnt}</th>`;
   }
   html+=`</tr></thead><tbody>`;
 
   for(const mod of mods){
-    html+=`<tr><td class="mod-name">${mod}</td>`;
-    for(const tk of tks){
-      const modData=pd[mod]||{};
-      // Collect all entries for this testType (any system_no)
-      const entries=Object.entries(modData).filter(([k])=>k===tk+'|'||(k.startsWith(tk+'|')));
-      const offline=!msConnected;
-      {
-        // Check if N/A (key tk+'|')
-        const naEntry=modData[tk+'|N/A'];
-        const realEntries=entries.filter(([k,v])=>v&&v.data&&v.data.result!=='N/A');
-        const hasNA=entries.some(([k,v])=>v&&v.data&&v.data.result==='N/A');
-        if(hasNA&&realEntries.length===0){
-          if(isAdmin()&&!offline){
-            html+=`<td class="cell-na-set" onclick="clearNA('${mod}','${tk}')" title="Click to remove N/A">N/A ✕</td>`;
-          } else {
-            html+=`<td class="cell-na-set" title="Not applicable">N/A</td>`;
-          }
-        } else if(realEntries.length>0){
-          let inner='';
-          for(const [key,entry] of realEntries){
-            const d=entry.data;
-            const dateStr=d.date||'';
-            const res=d.result||'';
-            const color=res==='Passed'?'#2e7d32':res==='Failed'?'#c62828':res==='Pending'?'#e65100':'#999';
-            const sysNo=d.system_no&&d.system_no!=='N/A'?`<span style="font-size:10px;color:#888">${d.system_no}</span><br>`:'';
-            const sysNoEnc=encodeURIComponent(d.system_no||'');
-            inner+=`<div class="cell-done" onclick="openTestByKey('${mod}','${key}')" style="color:${color};border-bottom:1px solid #eee;padding:2px 0" title="Click to view/edit">${sysNo}${dateStr}<br><span style="font-size:10px">${res}</span></div>`;
-          }
-          if(!offline)inner+=`<div style="padding-top:3px"><button class="cell-btn" onclick="startTest('${mod}','${tk}')" style="font-size:10px;padding:2px 6px">+ Add</button></div>`;
-          html+=`<td style="padding:4px">${inner}</td>`;
-        } else if(offline){
-          html+=`<td class="cell-empty">—</td>`;
-        } else {
-          const naBtn=isAdmin()?`<button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>`:'';
-          html+=`<td style="white-space:nowrap">
-            <button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button>${naBtn}
-          </td>`;
-        }
+    const infos=tks.map(tk=>cellInfo(mod,tk));
+    const need=infos.filter(i=>i.state!=='na').length;
+    const done=infos.filter(i=>i.state==='done').length;
+    const pct=need?Math.round(done/need*100):100;
+    html+=`<tr><td class="mod-name">${mod}<span class="mod-prog${done===need?' all':''}">${done}/${need} passed</span>
+      <div class="mod-bar"><div style="width:${pct}%"></div></div></td>`;
+    tks.forEach((tk,ix)=>{
+      const {real,na}=infos[ix];
+      if(na&&!real.length){
+        const can=admin&&!offline;
+        html+=`<td><div class="tile na" ${can?`onclick="clearNA('${mod}','${tk}')" title="Tap to remove N/A"`:'title="Not applicable"'}>
+          <span class="t-res">N/A</span>${can?'<span class="t-x">✕</span>':''}</div></td>`;
+      }else if(real.length){
+        let inner='';
+        real.forEach(([key,entry],i)=>{
+          const d=entry.data;
+          const res=d.result||'';
+          const cls=res==='Passed'?'passed':res==='Failed'?'failed':res==='Pending'?'pending':'incomplete';
+          const label=res||'Incomplete';
+          const sys=d.system_no&&d.system_no!=='N/A'?`<span class="t-sys">${d.system_no.replace('System No.','Sys ')}</span>`:'';
+          const addBtn=(!offline&&i===real.length-1)?`<button class="t-add" title="Add another test (e.g. System No.2)" onclick="event.stopPropagation();startTest('${mod}','${tk}')">+</button>`:'';
+          inner+=`<div class="tile ${cls}" onclick="openTestByKey('${mod}','${key}')" title="Tap to view / edit">${addBtn}${sys}<span class="t-res">${label}</span><span class="t-date">${fmtDate(d.date)}</span></div>`;
+        });
+        html+=`<td>${inner}</td>`;
+      }else if(offline){
+        html+=`<td class="cell-empty">—</td>`;
+      }else{
+        const naBtn=admin?`<button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>`:'';
+        html+=`<td><div class="empty-cell"><button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button>${naBtn}</div></td>`;
       }
-    }
+    });
     html+=`</tr>`;
   }
   html+=`</tbody></table>`;
-  html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Click any date cell to view or edit. "+ Add" to record a new test. "N/A" if test is not applicable.</p>`;
+  html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Tap a coloured cell to view or edit. "+" in a cell adds another test (e.g. System No.2).</p>`;
   wrap.innerHTML=html;
 }
+
 
 // ========== N/A FUNCTIONS ==========
 let naBusy={}; // `${mod}|${tk}` -> true while saving, blocks double taps
@@ -1323,10 +1350,9 @@ function updateDiffs(){
     setDiffCell('diff-p1',d1,0);
     setDiffCell('diff-p2',d2,0);
     // Passed if at least Part I is filled and all filled parts are 0
-    const anyFilled=d1!==null||d2!==null;
     const anyFailed=(d1!==null&&d1!==0)||(d2!==null&&d2!==0);
-    const passed=anyFilled&&!anyFailed;
-    const failed=anyFilled&&anyFailed;
+    const passed=d1!==null&&!anyFailed;
+    const failed=anyFailed;
     setResult(passed,failed);
   }
   if(t==='QC-4.2'){
@@ -1386,6 +1412,8 @@ function setResult(passed,failed){
 }
 
 // ========== COLLECT FORM DATA ==========
+function fmtVal(x,unit){return (x===null||x===undefined||x===''||(typeof x==='number'&&isNaN(x)))?'—':`${x} ${unit}`;}
+function numOrNull(v){const n=parseFloat(v);return isNaN(n)?null:n;}
 function collectFormData(){
   const t=currentTestCtx.testType;
   const existing=currentTestCtx.data||{};
@@ -1401,23 +1429,25 @@ function collectFormData(){
   };
 
   if(t==='QC-4.0'||t==='QC-4.1'){
-    const p1s=parseFloat(document.getElementById('f-p1-ps').value);
-    const p1e=parseFloat(document.getElementById('f-p1-pe').value);
-    const p2s=parseFloat(document.getElementById('f-p2-ps').value);
-    const p2e=parseFloat(document.getElementById('f-p2-pe').value);
-    const d1=isNaN(p1s)||isNaN(p1e)?null:+(p1e-p1s).toFixed(2);
-    const d2=isNaN(p2s)||isNaN(p2e)?null:+(p2e-p2s).toFixed(2);
+    const p1s=numOrNull(document.getElementById('f-p1-ps').value);
+    const p1e=numOrNull(document.getElementById('f-p1-pe').value);
+    const p2s=numOrNull(document.getElementById('f-p2-ps').value);
+    const p2e=numOrNull(document.getElementById('f-p2-pe').value);
+    const d1=p1s===null||p1e===null?null:+(p1e-p1s).toFixed(2);
+    const d2=p2s===null||p2e===null?null:+(p2e-p2s).toFixed(2);
     base.system=document.getElementById('f-system')?.value||'';
     base.system_no=document.getElementById('f-sysno')?.value||'';
     base.visual_inspection=document.getElementById('f-vi')?.checked||false;
     base.part_i={start_time:document.getElementById('f-p1-ts').value,end_time:document.getElementById('f-p1-te').value,pressure_start:p1s,pressure_end:p1e,difference:d1,start_photo_id:existing.part_i?.start_photo_id||null,end_photo_id:existing.part_i?.end_photo_id||null};
     base.part_ii={start_time:document.getElementById('f-p2-ts').value,end_time:document.getElementById('f-p2-te').value,pressure_start:p2s,pressure_end:p2e,difference:d2,start_photo_id:existing.part_ii?.start_photo_id||null,end_photo_id:existing.part_ii?.end_photo_id||null};
-    base.result=(d1!==null&&d2!==null&&d1===0&&d2===0)?'Passed':(d1!==null&&d2!==null?'Failed':'');
+    // Same rule as the on-screen result: Part I required, Part II optional, every filled part must be 0
+    const filled=[d1,d2].filter(x=>x!==null);
+    base.result=d1===null?'':(filled.every(x=>x===0)?'Passed':'Failed');
   }
   if(t==='QC-4.2'){
-    const ws=parseFloat(document.getElementById('f-wl-start').value);
-    const we=parseFloat(document.getElementById('f-wl-end').value);
-    const diff=isNaN(ws)||isNaN(we)?null:+(we-ws).toFixed(1);
+    const ws=numOrNull(document.getElementById('f-wl-start').value);
+    const we=numOrNull(document.getElementById('f-wl-end').value);
+    const diff=ws===null||we===null?null:+(we-ws).toFixed(1);
     base.system_no=document.getElementById('f-sysno')?.value||'';
     base.start_time=document.getElementById('f-start-time')?.value||'';
     base.end_time=document.getElementById('f-end-time')?.value||'';
@@ -1428,12 +1458,12 @@ function collectFormData(){
     base.result=diff!==null?(Math.abs(diff)<=1?'Passed':'Failed'):'';
   }
   if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
-    const hs=parseFloat(document.getElementById('f-hot-ps').value);
-    const he=parseFloat(document.getElementById('f-hot-pe').value);
-    const cs=parseFloat(document.getElementById('f-cold-ps').value);
-    const ce=parseFloat(document.getElementById('f-cold-pe').value);
-    const dh=isNaN(hs)||isNaN(he)?null:+(he-hs).toFixed(2);
-    const dc=isNaN(cs)||isNaN(ce)?null:+(ce-cs).toFixed(2);
+    const hs=numOrNull(document.getElementById('f-hot-ps').value);
+    const he=numOrNull(document.getElementById('f-hot-pe').value);
+    const cs=numOrNull(document.getElementById('f-cold-ps').value);
+    const ce=numOrNull(document.getElementById('f-cold-pe').value);
+    const dh=hs===null||he===null?null:+(he-hs).toFixed(2);
+    const dc=cs===null||ce===null?null:+(ce-cs).toFixed(2);
     base.system_scope=document.getElementById('f-scope')?.value||'';
     base.system_no=document.getElementById('f-sysno')?.value||'';
     base.start_time=document.getElementById('f-start-time')?.value||'';
@@ -1744,17 +1774,17 @@ function _buildPDFDocument(data,loadedPhotos){
     <p class="note">Acceptance criterion: Δ = 0 bar</p>
     <table class="mtbl">
       <tr class="th"><th></th><th>Start Time</th><th>End Time</th><th>Pressure Start</th><th>Pressure End</th><th>Difference</th></tr>
-      <tr><td class="rl">Part I</td><td>${data.part_i?.start_time||'—'}</td><td>${data.part_i?.end_time||'—'}</td><td>${data.part_i?.pressure_start??'—'} bar</td><td>${data.part_i?.pressure_end??'—'} bar</td><td class="diff">${data.part_i?.difference??'—'} bar</td></tr>
-      <tr class="alt"><td class="rl">Part II</td><td>${data.part_ii?.start_time||'—'}</td><td>${data.part_ii?.end_time||'—'}</td><td>${data.part_ii?.pressure_start??'—'} bar</td><td>${data.part_ii?.pressure_end??'—'} bar</td><td class="diff">${data.part_ii?.difference??'—'} bar</td></tr>
+      <tr><td class="rl">Part I</td><td>${data.part_i?.start_time||'—'}</td><td>${data.part_i?.end_time||'—'}</td><td>${fmtVal(data.part_i?.pressure_start,'bar')}</td><td>${fmtVal(data.part_i?.pressure_end,'bar')}</td><td class="diff">${fmtVal(data.part_i?.difference,'bar')}</td></tr>
+      <tr class="alt"><td class="rl">Part II</td><td>${data.part_ii?.start_time||'—'}</td><td>${data.part_ii?.end_time||'—'}</td><td>${fmtVal(data.part_ii?.pressure_start,'bar')}</td><td>${fmtVal(data.part_ii?.pressure_end,'bar')}</td><td class="diff">${fmtVal(data.part_ii?.difference,'bar')}</td></tr>
     </table>`;
   } else if(t==='QC-4.2'){
     measHtml=`<div class="section">2. Measurements — 30 min</div>
     <p class="note">Acceptance criterion: |Δ| ≤ 1 mm</p>
     <div class="row"><span class="lbl">Start Time</span><span class="val">${data.start_time||'—'}</span></div>
     <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||'—'}</span></div>
-    <div class="row"><span class="lbl">Water Level Start</span><span class="val">${data.water_level_start??'—'} mm</span></div>
-    <div class="row"><span class="lbl">Water Level End</span><span class="val">${data.water_level_end??'—'} mm</span></div>
-    <div class="row"><span class="lbl">Difference</span><span class="val diff">${data.difference??'—'} mm</span></div>`;
+    <div class="row"><span class="lbl">Water Level Start</span><span class="val">${fmtVal(data.water_level_start,'mm')}</span></div>
+    <div class="row"><span class="lbl">Water Level End</span><span class="val">${fmtVal(data.water_level_end,'mm')}</span></div>
+    <div class="row"><span class="lbl">Difference</span><span class="val diff">${fmtVal(data.difference,'mm')}</span></div>`;
   } else {
     measHtml=`<div class="section">2. Pneumatic Test — ${t==='QC-5.1'?'6':'8'} bar / 2 hours</div>
     <p class="note">Test pressure: ${t==='QC-5.1'?'6 bar (0.6 MPa)':'8 bar (0.8 MPa)'} · Acceptance criterion: Δ = 0 bar</p>
@@ -1762,8 +1792,8 @@ function _buildPDFDocument(data,loadedPhotos){
     <div class="row"><span class="lbl">End Time</span><span class="val">${data.end_time||'—'}</span></div>
     <table class="mtbl" style="margin-top:8px">
       <tr class="th"><th></th><th>Pressure Start</th><th>Pressure End</th><th>Difference</th></tr>
-      <tr><td class="rl" style="color:#c62828">● HOT</td><td>${data.hot?.pressure_start??'—'} bar</td><td>${data.hot?.pressure_end??'—'} bar</td><td class="diff">${data.hot?.difference??'—'} bar</td></tr>
-      <tr class="alt"><td class="rl" style="color:#1565c0">● COLD</td><td>${data.cold?.pressure_start??'—'} bar</td><td>${data.cold?.pressure_end??'—'} bar</td><td class="diff">${data.cold?.difference??'—'} bar</td></tr>
+      <tr><td class="rl" style="color:#c62828">● HOT</td><td>${fmtVal(data.hot?.pressure_start,'bar')}</td><td>${fmtVal(data.hot?.pressure_end,'bar')}</td><td class="diff">${fmtVal(data.hot?.difference,'bar')}</td></tr>
+      <tr class="alt"><td class="rl" style="color:#1565c0">● COLD</td><td>${fmtVal(data.cold?.pressure_start,'bar')}</td><td>${fmtVal(data.cold?.pressure_end,'bar')}</td><td class="diff">${fmtVal(data.cold?.difference,'bar')}</td></tr>
     </table>`;
   }
 
