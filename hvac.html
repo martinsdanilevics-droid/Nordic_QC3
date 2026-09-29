@@ -279,7 +279,69 @@ function today(){return new Date().toLocaleDateString('de-DE');}
 function todayISO(){return new Date().toISOString().slice(0,10);}
 
 // ========== TABS ==========
-function showTab(tab,pushHistory=true){
+// ── Unsaved-changes guard ─────────────────────────────────────────────────
+let formDirty=false;          // form edited since last save
+let photoUploadsInFlight=0;   // photos still uploading
+function isTestViewOpen(){const v=document.getElementById('view-test');return v&&v.style.display!=='none';}
+document.addEventListener('input',e=>{if(e.target.closest&&e.target.closest('#view-test'))formDirty=true;});
+document.addEventListener('change',e=>{if(e.target.type!=='file'&&e.target.closest&&e.target.closest('#view-test'))formDirty=true;});
+window.addEventListener('beforeunload',e=>{
+  if(isTestViewOpen()&&(formDirty||photoUploadsInFlight)){e.preventDefault();e.returnValue='';}
+});
+// Returns true if the test form can be left right now; otherwise asks and calls proceed() later
+function guardLeave(proceed){
+  if(!isTestViewOpen())return true;
+  if(photoUploadsInFlight){
+    showLeaveModal('Photo is still uploading','Please wait until the upload finishes, otherwise the photo will not be linked to the test.',[
+      {label:'OK, wait',style:'primary'}]);
+    return false;
+  }
+  if(!formDirty)return true;
+  showLeaveModal('Unsaved changes','This test has changes that are not saved yet.',[
+    {label:'💾 Save',style:'primary',fn:async()=>{if(await saveTest({stay:true})){formDirty=false;proceed();}}},
+    {label:'Leave without saving',style:'danger',fn:()=>{formDirty=false;proceed();}},
+    {label:'Stay',style:'plain'}]);
+  return false;
+}
+function showLeaveModal(title,text,buttons){
+  let m=document.getElementById('leave-modal');
+  if(!m){m=document.createElement('div');m.id='leave-modal';document.body.appendChild(m);}
+  const st={primary:'background:#2d5a3d;color:#fff;border:none',danger:'background:#fff;color:#c62828;border:1px solid #e0b4b4',plain:'background:#f5f5f5;color:#555;border:1px solid #ddd'};
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML=`<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:20px;font-family:inherit;box-shadow:0 8px 30px rgba(0,0,0,.25)">
+    <div style="font-weight:700;font-size:16px;color:#1a3a2a;margin-bottom:6px">${title}</div>
+    <div style="font-size:13px;color:#555;margin-bottom:16px">${text}</div>
+    ${buttons.map((b,i)=>`<button data-i="${i}" style="display:block;width:100%;padding:12px;margin-top:8px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;${st[b.style]}">${b.label}</button>`).join('')}
+  </div>`;
+  m.querySelectorAll('button').forEach(btn=>btn.onclick=async()=>{
+    const b=buttons[+btn.dataset.i];m.remove();if(b.fn)await b.fn();
+  });
+}
+// Short "Saved" confirmation + highlight of the saved cell in the overview
+function showToast(msg){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);}
+  t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f6b2a;color:#fff;padding:12px 22px;border-radius:24px;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:9998;transition:opacity .4s';
+  t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._h);t._h=setTimeout(()=>{t.style.opacity='0';},2200);
+}
+function flashCell(mod,tk){
+  const cell=document.querySelector(`[data-cell="${CSS.escape(mod+'|'+tk)}"]`);
+  if(!cell)return;
+  cell.scrollIntoView({block:'center',behavior:'smooth'});
+  cell.animate([{boxShadow:'inset 0 0 0 3px #2e7d32'},{boxShadow:'inset 0 0 0 3px transparent'}],{duration:1800,iterations:2});
+}
+// After a successful save: close the form and show the result in the overview
+function closeTestAfterSave(label){
+  formDirty=false;
+  const mod=currentTestCtx.module,tk=currentTestCtx.testType;
+  showTab('overview',true,true);
+  showToast(label);
+  setTimeout(()=>flashCell(mod,tk),150);
+}
+
+function showTab(tab,pushHistory=true,force=false){
+  if(tab==='overview'&&!force&&!guardLeave(()=>showTab('overview',true,true)))return false;
   document.getElementById('view-overview').style.display=tab==='overview'?'':'none';
   document.getElementById('view-test').style.display=tab==='test'?'':'none';
   document.getElementById('tab-overview').classList.toggle('active',tab==='overview');
@@ -291,6 +353,7 @@ function showTab(tab,pushHistory=true){
     if(tab==='test') window.history.pushState({view:'test'},'','');
     else window.history.replaceState({view:'overview'},'','');
   }
+  return true;
 }
 
 // Handle device back button
@@ -303,16 +366,22 @@ window.addEventListener('popstate',function(e){
   if(pm&&pm.style.display==='flex'){pm.style.display='none';window.history.pushState({view:'test'},'','');return;}
   // If on test form - go back to overview
   const testView=document.getElementById('view-test');
-  if(testView&&testView.style.display!=='none'){showTab('overview',false);return;}
+  if(testView&&testView.style.display!=='none'){
+    if(!showTab('overview',false))window.history.pushState({view:'test'},'',''); // stayed on the form
+    return;
+  }
 });
 
 // ========== PROJECT CHANGE ==========
 function onProjectChange(){
-  currentProject=document.getElementById('project-sel').value;
+  const sel=document.getElementById('project-sel');
+  const wanted=sel.value;
+  if(!guardLeave(()=>{sel.value=wanted;formDirty=false;onProjectChange();})){sel.value=currentProject;return;}
+  currentProject=sel.value;
   try{localStorage.setItem('hvac_last_project',currentProject);}catch(e){}
   folderCache={};
   if(!loadFromCache())testsData[currentProject]={};
-  showTab('overview');
+  showTab('overview',true,true);
   if(msConnected)loadProjectTests();
 }
 
@@ -758,9 +827,10 @@ function renderMatrix(){
       <div class="mod-bar"><div style="width:${pct}%"></div></div></td>`;
     tks.forEach((tk,ix)=>{
       const {real,na}=infos[ix];
+      const cellAttr=`data-cell="${mod}|${tk}"`;
       if(na&&!real.length){
         const can=admin&&!offline;
-        html+=`<td><div class="tile na" ${can?`onclick="clearNA('${mod}','${tk}')" title="Tap to remove N/A"`:'title="Not applicable"'}>
+        html+=`<td ${cellAttr}><div class="tile na" ${can?`onclick="clearNA('${mod}','${tk}')" title="Tap to remove N/A"`:'title="Not applicable"'}>
           <span class="t-res">N/A</span>${can?'<span class="t-x">✕</span>':''}</div></td>`;
       }else if(real.length){
         let inner='';
@@ -773,12 +843,12 @@ function renderMatrix(){
           const addBtn=(!offline&&i===real.length-1)?`<button class="t-add" title="Add another test (e.g. System No.2)" onclick="event.stopPropagation();startTest('${mod}','${tk}')">+</button>`:'';
           inner+=`<div class="tile ${cls}" onclick="openTestByKey('${mod}','${key}')" title="Tap to view / edit">${addBtn}${sys}<span class="t-res">${label}</span><span class="t-date">${fmtDate(d.date)}</span></div>`;
         });
-        html+=`<td>${inner}</td>`;
+        html+=`<td ${cellAttr}>${inner}</td>`;
       }else if(offline){
         html+=`<td class="cell-empty">—</td>`;
       }else{
         const naBtn=admin?`<button class="cell-btn-na" onclick="setNA('${mod}','${tk}')">N/A</button>`:'';
-        html+=`<td><div class="empty-cell"><button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button>${naBtn}</div></td>`;
+        html+=`<td ${cellAttr}><div class="empty-cell"><button class="cell-btn" onclick="startTest('${mod}','${tk}')">+ Add</button>${naBtn}</div></td>`;
       }
     });
     html+=`</tr>`;
@@ -870,6 +940,7 @@ async function clearNA(mod,tk){
 
 
 function startTest(mod,testType){
+  formDirty=false;
   currentTestCtx={module:mod,testType,data:null};
   renderTestForm();
   document.getElementById('tab-test').style.display='';
@@ -881,6 +952,7 @@ function openTest(mod,testType){
 }
 
 function openTestByKey(mod,key){
+  formDirty=false;
   const tk=key.split('|')[0];
   const entry=(testsData[currentProject]||{})[mod]?.[key];
   currentTestCtx={module:mod,testType:tk,stateKey:key,data:entry?entry.data:null,fileId:entry?entry.fileId:null,fileName:entry?entry.fileName:null};
@@ -1240,17 +1312,18 @@ document.getElementById('file-input').addEventListener('change',handlePhotoInput
 async function handlePhotoInput(e){
   const file=e.target.files[0];
   if(!file||!currentPhotoSlot)return;
+  const slotId=currentPhotoSlot; // keep the slot even if another one is tapped meanwhile
   e.target.value='';
   if(!msConnected){alert('Connect OneDrive first.');return;}
   // Show preview immediately
   const reader=new FileReader();
   reader.onload=ev=>{
-    const slot=document.getElementById('slot-'+currentPhotoSlot);
-    const label=slot?.querySelector('.photo-label')?.textContent||currentPhotoSlot;
+    const slot=document.getElementById('slot-'+slotId);
+    const label=slot?.querySelector('.photo-label')?.textContent||slotId;
     if(slot){
       slot.innerHTML=`<img src="${ev.target.result}" alt="photo"/>
         <div class="photo-label-overlay">${label}</div>
-        <div class="uploading-overlay" id="upl-${currentPhotoSlot}">Uploading...</div>`;
+        <div class="uploading-overlay" id="upl-${slotId}">Uploading...</div>`;
     }
   };
   reader.readAsDataURL(file);
@@ -1264,36 +1337,46 @@ async function handlePhotoInput(e){
     'ph-hot-start':'f-start-time','ph-hot-end':'f-end-time',
     'ph-cold-start':'f-start-time','ph-cold-end':'f-end-time'
   };
-  const timeFieldId=slotTimeMap[currentPhotoSlot];
+  const timeFieldId=slotTimeMap[slotId];
   if(timeFieldId){
     const tf=document.getElementById(timeFieldId);
     if(tf&&!tf.value)tf.value=timeStr; // only set if empty
   }
   // Upload
+  photoUploadsInFlight++;
   try{
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
-    const fname=`${currentTestCtx.module.replace(/[ -]/g,'')}_${currentPhotoSlot}_${Date.now()}.jpg`.replace(/\s/g,'_');
+    const fname=`${currentTestCtx.module.replace(/[ -]/g,'')}_${slotId}_${Date.now()}.jpg`.replace(/\s/g,'_');
     const buf=await file.arrayBuffer();
     const res=await fetch(`${GRAPH_BASE}/me/drive/items/${folder.id}:/${fname}:/content`,{
       method:'PUT',
       headers:{Authorization:`Bearer ${await ensureToken()}`,'Content-Type':'image/jpeg'},
       body:buf
     });
+    if(!res.ok)throw new Error('upload '+res.status);
     const data=await res.json();
     const driveId=data.id;
     // Store in context
-    storePhotoId(currentPhotoSlot,driveId);
+    storePhotoId(slotId,driveId);
     // Remove uploading overlay
-    const slot=document.getElementById('slot-'+currentPhotoSlot);
-    const upl=document.getElementById('upl-'+currentPhotoSlot);
+    const slot=document.getElementById('slot-'+slotId);
+    const upl=document.getElementById('upl-'+slotId);
     if(upl)upl.style.display='none';
     if(slot){slot.setAttribute('data-drive-id',driveId);slot.onclick=null;}
+    photoUploadsInFlight--;
     // Auto-save so photo IDs are never lost
+    const wasDirty=formDirty;
     const autoData=collectFormData();
-    await _saveData(autoData);
-    setStatus('Photo saved ✓');
+    if(await _saveData(autoData)){formDirty=false;setStatus('Photo saved ✓');}
+    else formDirty=wasDirty||true;
     updateDiffs();
-  }catch(err){setStatus('Photo upload error: '+err.message);}
+  }catch(err){
+    photoUploadsInFlight=Math.max(0,photoUploadsInFlight-1);
+    setStatus('Photo upload error: '+err.message);
+    alert('Photo was NOT uploaded: '+err.message);
+    const upl=document.getElementById('upl-'+slotId);
+    if(upl)upl.textContent='Upload failed';
+  }
 }
 
 function storePhotoId(slotId,driveId){
@@ -1330,6 +1413,7 @@ async function removePhoto(e,slotId,driveId){
     slot.onclick=()=>clickPhotoSlot(slotId);
   }
   storePhotoId(slotId,null);
+  formDirty=true;
   // Delete from OneDrive
   try{await graphRequest(`/me/drive/items/${driveId}`,{method:'DELETE'});}catch(e){}
   updateDiffs();
@@ -1476,13 +1560,17 @@ function collectFormData(){
 }
 
 // ========== SAVE ==========
-async function saveTest(){
-  if(!msConnected){alert('Connect OneDrive first.');return;}
+async function saveTest(opts={}){
+  if(!msConnected){alert('Connect OneDrive first.');return false;}
   setStatus('Saving...');
   if(currentTestCtx.data)currentTestCtx.data.result=null; // clear pending if was set
   const data=collectFormData();
-  await _saveData(data);
-  updateDiffs();
+  const ok=await _saveData(data);
+  if(!ok)return false;
+  formDirty=false;
+  if(opts.stay){updateDiffs();return true;}
+  closeTestAfterSave(data.result==='Passed'?'✓ Saved — Passed':data.result==='Failed'?'✓ Saved — Failed':'✓ Saved');
+  return true;
 }
 
 // ========== PENDING + DELETE ==========
@@ -1490,16 +1578,13 @@ async function saveAsPassed(){
   if(!msConnected){alert('Connect OneDrive first.');return;}
   const data=collectFormData();
   // Allow saving as Passed if calculated result is Passed
-  if(data.result!=='Passed'){setStatus('Result is not Passed — check pressure differences.');return;}
+  if(data.result!=='Passed'){setStatus('Result is not Passed — check pressure differences.');alert('Result is not Passed — check the pressures / water levels.\nUse "Save" or "Save as Pending" instead.');return;}
   data.result='Passed';
   data.status='Passed';
   if(!currentTestCtx.data)currentTestCtx.data={};
   currentTestCtx.data.result='Passed';
   currentTestCtx.data.status='Passed';
-  await _saveData(data);
-  // Update UI - hide Save as Passed (already saved), update result bar
-  setResult(true,false);
-  updateDiffs();
+  if(await _saveData(data))closeTestAfterSave('✓ Saved as Passed — report is being created');
 }
 
 async function saveAsPending(){
@@ -1508,12 +1593,14 @@ async function saveAsPending(){
   data.result='Pending';
   if(!currentTestCtx.data)currentTestCtx.data={};
   currentTestCtx.data.result='Pending';
-  await _saveData(data);
-  updateDiffs();
+  if(await _saveData(data))closeTestAfterSave('✓ Saved as Pending');
 }
 
 async function deleteTest(){
-  if(!currentTestCtx.fileId){showTab('overview');return;}
+  if(!currentTestCtx.fileId){
+    if(formDirty&&!confirm('Discard this unsaved test?'))return;
+    formDirty=false;showTab('overview',true,true);return;
+  }
   if(!confirm('Move this test to _Deleted folder? Photos will also be moved.'))return;
   setStatus('Moving to _Deleted...');
   try{
@@ -1548,7 +1635,9 @@ async function deleteTest(){
     notePending(currentTestCtx.module,key,'del',{fileId:currentTestCtx.fileId});
     saveToCache();
     setStatus('Moved to _Deleted ✓');
-    showTab('overview');
+    formDirty=false;
+    showTab('overview',true,true);
+    showToast('Test moved to _Deleted');
     renderMatrix();
   }catch(e){setStatus('Delete error: '+e.message);console.error(e);}
 }
@@ -1564,6 +1653,8 @@ function collectPhotoIds(d){
 }
 
 async function _saveData(data){
+  // wait for photos that are still uploading so their links are saved too
+  for(let i=0;photoUploadsInFlight&&i<120;i++){setStatus('Waiting for photo upload...');await new Promise(r=>setTimeout(r,500));}
   try{
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
     const mod=currentTestCtx.module.replace(/[ -]/g,'');
@@ -1599,7 +1690,12 @@ async function _saveData(data){
       setStatus('Generating PDF...');
       setTimeout(()=>generateAndUploadPDF(data,folder),300);
     }
-  }catch(e){setStatus('Save error: '+e.message);console.error(e);}
+    return true;
+  }catch(e){
+    setStatus('Save error: '+e.message);console.error(e);
+    alert('Test NOT saved: '+e.message+'\nCheck the connection and try again.');
+    return false;
+  }
 }
 
 async function generateAndUploadPDF(data,folder){
@@ -1608,7 +1704,7 @@ async function generateAndUploadPDF(data,folder){
     const pdfHtml=await buildPDFHtml(data);
     setStatus('📤 Uploading report to OneDrive...');
     const blob=new Blob([pdfHtml],{type:'text/html;charset=utf-8'});
-    const t=currentTestCtx.testType;
+    const t=data.test_type||currentTestCtx.testType;
     const mod=(data.module||'').replace(/[ -]/g,'');
     const dateStr=(data.date||todayISO()).replace(/-/g,'');
     const sysNo=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
