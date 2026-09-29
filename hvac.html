@@ -33,20 +33,22 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .main{padding:16px;max-width:1200px;margin:0 auto;}
 
 /* OVERVIEW MATRIX */
-.matrix-wrap{overflow-x:auto;}
-.matrix-table{border-collapse:separate;border-spacing:0;min-width:760px;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);}
+.matrix-wrap{}
+/* The table scrolls inside its own box, so the header row and module column stay frozen */
+.matrix-scroll{overflow:auto;max-height:calc(100vh - 190px);max-height:calc(100dvh - 190px);border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.08);background:#fff;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+.matrix-table{border-collapse:separate;border-spacing:0;min-width:760px;width:100%;background:#fff;}
 .matrix-table th{background:#2d5a3d;color:#fff;padding:9px 8px;font-size:12px;text-align:center;white-space:nowrap;position:sticky;top:0;z-index:2;}
 .matrix-table th .th-sub{display:block;font-weight:400;font-size:10px;opacity:.85;}
 .matrix-table th .th-count{display:inline-block;margin-top:4px;font-size:10px;font-weight:600;background:rgba(255,255,255,.18);border-radius:8px;padding:1px 7px;}
-.matrix-table th.mod-col{text-align:left;min-width:96px;left:0;z-index:3;}
+.matrix-table th.mod-col{text-align:left;min-width:96px;left:0;z-index:4;box-shadow:2px 0 0 rgba(0,0,0,.08);}
 .matrix-table td{padding:3px;font-size:12px;text-align:center;border-bottom:1px solid #eef0ee;border-right:1px solid #eef0ee;vertical-align:middle;height:52px;}
-.matrix-table td.mod-name{text-align:left;font-weight:700;color:#1a3a2a;background:#f8fdf9;padding:6px 10px;position:sticky;left:0;z-index:1;white-space:nowrap;}
+.matrix-table td.mod-name{text-align:left;font-weight:700;color:#1a3a2a;background:#f8fdf9;padding:6px 10px;position:sticky;left:0;z-index:2;white-space:nowrap;box-shadow:2px 0 0 rgba(0,0,0,.06);}
 .mod-prog{display:block;font-size:10px;font-weight:600;color:#6b8a76;margin-top:2px;}
 .mod-prog.all{color:#2e7d32;}
 .mod-bar{height:3px;background:#e3ece6;border-radius:2px;margin-top:3px;overflow:hidden;}
 .mod-bar>div{height:100%;background:#2e7d32;}
 /* status tiles fill the cell */
-.tile{position:relative;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:44px;border-radius:6px;cursor:pointer;padding:4px 20px;box-sizing:border-box;line-height:1.25;}
+.tile{position:relative;z-index:0;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:44px;border-radius:6px;cursor:pointer;padding:4px 20px;box-sizing:border-box;line-height:1.25;}
 .tile+.tile{margin-top:3px;}
 .tile .t-res{font-weight:700;font-size:12px;}
 .tile .t-date{font-size:11px;opacity:.85;}
@@ -810,7 +812,7 @@ function renderMatrix(){
     <span><i style="background:repeating-linear-gradient(135deg,#f3f3f3 0 4px,#e6e6e6 4px 8px);border:1px solid #e2e2e2"></i>N/A</span>
     <span><i style="background:#fff;border:1px solid #ddd"></i>Not tested</span>
   </div>`;
-  html+=`<table class="matrix-table"><thead><tr><th class="mod-col">Module</th>`;
+  html+=`<div class="matrix-scroll" id="matrix-scroll"><table class="matrix-table"><thead><tr><th class="mod-col">Module</th>`;
   for(const tk of tks){
     const need=mods.filter(m=>cellInfo(m,tk).state!=='na');
     const done=need.filter(m=>cellInfo(m,tk).state==='done').length;
@@ -854,10 +856,25 @@ function renderMatrix(){
     });
     html+=`</tr>`;
   }
-  html+=`</tbody></table>`;
+  html+=`</tbody></table></div>`;
   html+=`<p style="font-size:11px;color:#999;margin-top:8px;">Tap a coloured cell to view or edit. "+" in a cell adds another test (e.g. System No.2).</p>`;
+  const old=document.getElementById('matrix-scroll');
+  const keep=old?{t:old.scrollTop,l:old.scrollLeft}:null;
   wrap.innerHTML=html;
+  const sc=document.getElementById('matrix-scroll');
+  if(sc){
+    fitMatrixHeight();
+    if(keep){sc.scrollTop=keep.t;sc.scrollLeft=keep.l;}
+  }
 }
+// Table box fills the screen below it (so only the table scrolls, not the page)
+function fitMatrixHeight(){
+  const sc=document.getElementById('matrix-scroll');
+  if(!sc||!sc.offsetParent)return;
+  const top=sc.getBoundingClientRect().top+window.scrollY;
+  sc.style.maxHeight=Math.max(260,window.innerHeight-top-40)+'px';
+}
+window.addEventListener('resize',fitMatrixHeight);
 
 
 // ========== N/A FUNCTIONS ==========
