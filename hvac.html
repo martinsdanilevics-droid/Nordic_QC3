@@ -899,7 +899,7 @@ function renderHeatingForm(d,testType){
       <div class="form-group"><label>Project</label><input type="text" value="${proj().label}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>Module No.</label><input type="text" value="${currentTestCtx.module}" readonly style="background:#f0f0f0"/></div>
       <div class="form-group"><label>System</label>
-        <input type="text" id="f-system" value="${d.system||currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System'}"/></div>
+        <input type="text" id="f-system" value="${d.system||(currentTestCtx.testType==='QC-4.0'?'Underfloor Heating System':'Radiator Heating System')}"/></div>
       <div class="form-group"><label>System No.</label>
         <select id="f-sysno">
           <option value="">— Select —</option>
@@ -1143,7 +1143,7 @@ function getPhotoMap(d){
   if(t==='QC-4.2'){
     return{'ph-sewer-start':d.start_photo_id,'ph-sewer-end':d.end_photo_id,'ph-sewer-overview':d.overview_photo_id};
   }
-  if(t==='QC-5.0'){
+  if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
     return{'ph-hot-start':d.hot?.start_photo_id,'ph-hot-end':d.hot?.end_photo_id,'ph-cold-start':d.cold?.start_photo_id,'ph-cold-end':d.cold?.end_photo_id};
   }
   return{};
@@ -1427,7 +1427,7 @@ function collectFormData(){
     base.overview_photo_id=existing.overview_photo_id||null;
     base.result=diff!==null?(Math.abs(diff)<=1?'Passed':'Failed'):'';
   }
-  if(t==='QC-5.0'){
+  if(t==='QC-5.0'||t==='QC-5.1'||t==='QC-5.2'){
     const hs=parseFloat(document.getElementById('f-hot-ps').value);
     const he=parseFloat(document.getElementById('f-hot-pe').value);
     const cs=parseFloat(document.getElementById('f-cold-ps').value);
