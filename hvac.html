@@ -282,6 +282,59 @@ function today(){return new Date().toLocaleDateString('de-DE');}
 function todayISO(){return new Date().toISOString().slice(0,10);}
 
 // ========== TABS ==========
+
+// ── Same system already tested? ──────────────────────────────────────────
+function sysLabel(s){return !s?'(no system selected)':s==='N/A'?'single system (N/A)':s;}
+function findExistingTest(mod,tk,sysNo,exceptFileId){
+  const modState=(testsData[currentProject]||{})[mod]||{};
+  const hit=Object.entries(modState).find(([k,v])=>v&&v.data&&v.fileId&&v.fileId!==exceptFileId&&
+    v.data.test_type===tk&&v.data.result!=='N/A'&&(v.data.system_no||'')===(sysNo||''));
+  return hit?{key:hit[0],entry:hit[1]}:null;
+}
+function fmtD(s){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?`${m[3]}.${m[2]}.${m[1]}`:(s||'');}
+// Inline warning under "System No." while filling in a NEW test
+function initSysnoWarning(){
+  const sel=document.getElementById('f-sysno');
+  if(!sel)return;
+  if(!document.getElementById('sysno-warn'))sel.insertAdjacentHTML('afterend','<div id="sysno-warn" style="display:none;margin-top:6px;padding:8px 10px;border-radius:8px;background:#fff3e0;border:1px solid #f0b56b;color:#8a4b00;font-size:12px;line-height:1.4"></div>');
+  sel.addEventListener('change',updateSysnoWarning);
+  updateSysnoWarning();
+}
+function updateSysnoWarning(){
+  const el=document.getElementById('sysno-warn'),sel=document.getElementById('f-sysno');
+  if(!el||!sel)return;
+  const ex=currentTestCtx.fileId?null:findExistingTest(currentTestCtx.module,currentTestCtx.testType,sel.value,null);
+  if(!ex){el.style.display='none';return;}
+  const d=ex.entry.data;
+  el.innerHTML=`⚠ <b>${sysLabel(sel.value)}</b> already has a test (${fmtD(d.date)}, ${d.result||'incomplete'}).
+    Saving will create a <b>second</b> test. If you want to continue that test, <a href="#" onclick="event.preventDefault();openExistingFromWarning('${ex.key}')" style="color:#8a4b00;font-weight:700">open the existing test</a>.
+    If this is System No.2, change the System No. above.`;
+  el.style.display='block';
+}
+function openExistingFromWarning(key){
+  const go=()=>{formDirty=false;openTestByKey(currentTestCtx.module,key);};
+  if(formDirty){
+    showLeaveModal('Open the existing test?','What you entered in this new form will be lost.',[
+      {label:'Open existing test',style:'primary',fn:go},{label:'Stay here',style:'plain'}]);
+  }else go();
+}
+// Asked once when a NEW test is saved for a system that already has one. Resolves true to save.
+function confirmDuplicateSave(data){
+  if(currentTestCtx.fileId||currentTestCtx.allowDuplicate)return Promise.resolve(true);
+  const ex=findExistingTest(currentTestCtx.module,currentTestCtx.testType,data.system_no||'',null);
+  if(!ex)return Promise.resolve(true);
+  const d=ex.entry.data;
+  return new Promise(resolve=>{
+    showLeaveModal('This system already has a test',
+      `${currentTestCtx.module} · ${currentTestCtx.testType} · <b>${sysLabel(data.system_no)}</b> was already tested on ${fmtD(d.date)} (${d.result||'incomplete'}).<br><br>
+       If this is another system, choose <b>Cancel</b> and change "System No.". The overview shows only the newest test per system.`,[
+      {label:'Save as an additional test',style:'danger',fn:()=>{currentTestCtx.allowDuplicate=true;resolve(true);}},
+      {label:'Open the existing test',style:'plain',fn:()=>{resolve(false);formDirty=false;openTestByKey(currentTestCtx.module,ex.key);}},
+      {label:'Cancel',style:'primary',fn:()=>resolve(false)}]);
+    // closing via backdrop isn't possible; every button resolves
+  });
+}
+
 // ── Unsaved-changes guard ─────────────────────────────────────────────────
 let formDirty=false;          // form edited since last save
 let photoUploadsInFlight=0;   // photos still uploading
@@ -324,9 +377,11 @@ function showLeaveModal(title,text,buttons){
 function showToast(msg){
   let t=document.getElementById('toast');
   if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);}
-  t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f6b2a;color:#fff;padding:12px 22px;border-radius:24px;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:9998;transition:opacity .4s';
-  t.textContent=msg;t.style.opacity='1';
-  clearTimeout(t._h);t._h=setTimeout(()=>{t.style.opacity='0';},2200);
+  // pointer-events:none — the notice must never block buttons underneath it
+  t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#1f6b2a;color:#fff;padding:12px 22px;border-radius:24px;font-weight:700;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:9997;transition:opacity .4s;pointer-events:none';
+  t.textContent=msg;t.style.display='block';t.style.opacity='1';
+  clearTimeout(t._h);clearTimeout(t._h2);
+  t._h=setTimeout(()=>{t.style.opacity='0';t._h2=setTimeout(()=>{t.style.display='none';},450);},2200);
 }
 function flashCell(mod,tk){
   const cell=document.querySelector(`[data-cell="${CSS.escape(mod+'|'+tk)}"]`);
@@ -663,7 +718,7 @@ function clearCache(proj){
 
 // One key per module+test type+system; N/A has its own key
 function entryKey(data){
-  if(data&&data.result==='N/A')return data.test_type+'|N/A';
+  if(data&&data.result==='N/A')return data.test_type+'|#NA';
   return (data&&data.test_type)+'|'+((data&&data.system_no)||'');
 }
 
@@ -886,7 +941,7 @@ async function setNA(mod,tk){
   if(!confirm(`Mark ${mod} — ${tk} as N/A?`))return;
   naBusy[busyKey]=true;
   const data={test_type:tk,project:currentProject,module:mod,result:'N/A',date:todayISO(),saved_at:new Date().toISOString()};
-  const naKey=tk+'|N/A';
+  const naKey=tk+'|#NA';
   const fname=`${mod.replace(/[ -]/g,'')}_${tk}_NA.json`;
   if(!testsData[currentProject])testsData[currentProject]={};
   if(!testsData[currentProject][mod])testsData[currentProject][mod]={};
@@ -928,7 +983,7 @@ async function clearNA(mod,tk){
   Object.entries(files).forEach(([id,f])=>{
     const d=f&&f.data;
     if(d&&d.module===mod&&d.test_type===tk&&d.result==='N/A'&&!naEntries.some(([k,v])=>v.fileId===id))
-      naEntries.push([tk+'|N/A',{fileId:id,fileName:f.name,data:d}]);
+      naEntries.push([tk+'|#NA',{fileId:id,fileName:f.name,data:d}]);
   });
   // Remove from screen immediately
   naEntries.forEach(([k,v])=>{delete modData[k];notePending(mod,k,'del',v);});
@@ -964,6 +1019,7 @@ function startTest(mod,testType){
   renderTestForm();
   document.getElementById('tab-test').style.display='';
   showTab('test');
+  initSysnoWarning();
 }
 
 function openTest(mod,testType){
@@ -979,6 +1035,7 @@ function openTestByKey(mod,key){
   document.getElementById('tab-test').style.display='';
   showTab('test');
   showTestFileLocation(currentTestCtx.fileId);
+  initSysnoWarning();
 }
 
 // Shows where the test's JSON file actually is in OneDrive (with a link)
@@ -1696,6 +1753,7 @@ function collectPhotoIds(d){
 async function _saveData(data){
   // wait for photos that are still uploading so their links are saved too
   for(let i=0;photoUploadsInFlight&&i<120;i++){setStatus('Waiting for photo upload...');await new Promise(r=>setTimeout(r,500));}
+  if(!(await confirmDuplicateSave(data))){setStatus('Not saved');return false;}
   try{
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
     const mod=currentTestCtx.module.replace(/[ -]/g,'');
@@ -1707,10 +1765,11 @@ async function _saveData(data){
     if(fileId){
       await graphRequest(`/me/drive/items/${fileId}/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body});
     } else {
-      const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content`,{method:'PUT',headers:{'Content-Type':'application/json'},body});
+      // rename instead of overwriting if a file with this name already exists (same system, same day)
+      const res=await graphRequest(`/me/drive/items/${folder.id}:/${fname}:/content?@microsoft.graph.conflictBehavior=rename`,{method:'PUT',headers:{'Content-Type':'application/json'},body});
       fileId=res.id;
       currentTestCtx.fileId=fileId;
-      currentTestCtx.fileName=fname;
+      currentTestCtx.fileName=res.name||fname;
     }
     currentTestCtx.data=data;
     if(!testsData[currentProject])testsData[currentProject]={};
@@ -1721,6 +1780,7 @@ async function _saveData(data){
     // if the system no. changed, drop the old cell for this same file
     for(const [k,v] of Object.entries(modState))if(v&&v.fileId===fileId&&k!==sKey)delete modState[k];
     const savedEntry={fileId,fileName:currentTestCtx.fileName||fname,data};
+    const sysWarn=document.getElementById('sysno-warn');if(sysWarn)sysWarn.style.display='none';
     modState[sKey]=savedEntry;
     notePending(currentTestCtx.module,sKey,'set',savedEntry);
     saveToCache();
