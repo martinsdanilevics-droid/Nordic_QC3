@@ -1052,11 +1052,60 @@ async function showTestFileLocation(fileId){
     const folderUrl=(it.webUrl||'').replace(/\/[^/]*$/,'');
     const expected=`${currentTestCtx.module} HVAC Tests/${TEST_TYPES[currentTestCtx.testType].folder}`;
     const wrong=path&&!safeDec(path).endsWith(expected);
-    el.innerHTML=`📁 ${safeDec(path||'')}/${it.name} · <a href="${folderUrl}" target="_blank" style="color:#2d5a3d">Open folder in OneDrive</a>`+
-      (wrong?` <span style="color:#c62828;font-weight:700">⚠ not in the expected folder (${expected})</span>`:'');
+    const naSub=wrong&&/_N$/.test((it.parentReference&&it.parentReference.name)||safeDec(path).split('/').pop());
+    let html=`📁 ${safeDec(path||'')}/${it.name} · <a href="${folderUrl}" target="_blank" style="color:#2d5a3d">Open folder in OneDrive</a>`;
+    if(wrong)html+=` <span style="color:#c62828;font-weight:700">⚠ not in the expected folder (${expected})</span>`;
+    if(naSub){
+      html+=`<br><button class="cell-btn" style="margin-top:6px" onclick="fixNaFile('${fileId}')">Move file to the correct folder</button>`;
+      if(isAdmin())html+=` <button class="cell-btn" style="margin-top:6px" onclick="fixAllNaFiles()">Fix all such files in this project</button>`;
+    }
+    el.innerHTML=html;
   }catch(e){
     el.innerHTML=/Graph 404/.test(e.message)?'<span style="color:#c62828">⚠ File not found in OneDrive</span>':'';
   }
+}
+
+// Tests saved with System No. "N/A" before the fix were named "..._N/A_date.json", which OneDrive
+// stored as a sub-folder "..._N" containing "A_date.json". Move such a file up one level and
+// give it its intended name ("..._NA_date.json"). The file id and contents do not change.
+async function moveNaFileUp(fileId){
+  const it=await graphRequest(`/me/drive/items/${fileId}?$select=id,name,parentReference`);
+  const par=await graphRequest(`/me/drive/items/${it.parentReference.id}?$select=id,name,parentReference`);
+  if(!/_N$/.test(par.name)||!/^A_/.test(it.name))return false;           // not this case
+  if(!/^QC-/.test((par.parentReference&&par.parentReference.name)||''))return false; // parent must be the test folder
+  const newName=par.name+it.name;                                       // "JF32_QC-4.2_N"+"A_20261001.json"
+  await graphRequest(`/me/drive/items/${fileId}?@microsoft.graph.conflictBehavior=rename`,{method:'PATCH',
+    body:JSON.stringify({parentReference:{id:par.parentReference.id},name:newName})});
+  // remove the now empty helper folder
+  try{
+    const ch=await graphRequest(`/me/drive/items/${par.id}/children?$select=id&$top=1`);
+    if(!(ch.value||[]).length)await graphRequest(`/me/drive/items/${par.id}`,{method:'DELETE'});
+  }catch(e){console.warn('Could not remove folder',par.name,e);}
+  return true;
+}
+async function fixNaFile(fileId){
+  try{
+    setStatus('Moving file...');
+    const ok=await moveNaFileUp(fileId);
+    setStatus(ok?'File moved ✓':'Nothing to move');
+    if(ok)showToast('✓ File moved to the correct folder');
+    showTestFileLocation(fileId);
+  }catch(e){setStatus('Move error: '+e.message);alert('Could not move the file: '+e.message);}
+}
+async function fixAllNaFiles(){
+  const pd=testsData[currentProject]||{};
+  const list=[];
+  Object.values(pd).forEach(m=>Object.values(m||{}).forEach(v=>{if(v&&v.fileId&&v.data&&v.data.system_no==='N/A'&&v.data.result!=='N/A')list.push(v.fileId);}));
+  if(!list.length){alert('No tests with System No. "N/A" in this project.');return;}
+  if(!confirm(`Check ${list.length} test(s) with System No. "N/A" in ${proj().label} and move misplaced files to the correct folders?\nThe test data is not changed.`))return;
+  let moved=0,failed=0;
+  for(let i=0;i<list.length;i++){
+    setStatus(`Checking files ${i+1}/${list.length}...`);
+    try{if(await moveNaFileUp(list[i]))moved++;}catch(e){failed++;console.warn(e);}
+  }
+  setStatus(`Done: ${moved} moved${failed?`, ${failed} failed`:''}`);
+  alert(`Done: ${moved} file(s) moved to the correct folder${failed?`, ${failed} failed`:''}.`);
+  if(currentTestCtx&&currentTestCtx.fileId)showTestFileLocation(currentTestCtx.fileId);
 }
 
 // ========== RENDER TEST FORM ==========
@@ -1758,7 +1807,7 @@ async function _saveData(data){
     const folder=await getModuleHVACFolder(currentTestCtx.module,currentTestCtx.testType);
     const mod=currentTestCtx.module.replace(/[ -]/g,'');
     const dateStr=(data.date||todayISO()).replace(/-/g,'');
-    const sysNo=data.system_no?'_'+data.system_no.replace(/\s/g,''):'';
+    const sysNo=data.system_no?'_'+data.system_no.replace(/[\s\/\\:*?"<>|]/g,''):''; // "N/A" -> "NA" (a "/" would create a sub-folder)
     const fname=`${mod}_${currentTestCtx.testType}${sysNo}_${dateStr}.json`;
     const body=JSON.stringify(data,null,2);
     let fileId=currentTestCtx.fileId;
