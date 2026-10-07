@@ -226,6 +226,10 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 </div>
 
 <script>
+// Sign-in relay: the Dimensions QC-2 app (gabariti.html) signs in through this page's registered address
+(function(){var q=new URLSearchParams(location.search);if(q.get('state')==='gabariti'&&(q.get('code')||q.get('error'))){window.__gabRelay=true;location.replace(location.pathname.replace(/hvac\.html$/,'')+'gabariti.html'+location.search);}})();
+</script>
+<script>
 // ========== CONFIG ==========
 const MS_CLIENT_ID='18090634-b157-4e0c-837d-590122ea9eca';
 const MS_TENANT_ID='aac98fec-0701-4329-ad5d-8b1d279eeb6c';
@@ -573,6 +577,7 @@ function updateConnectBtn(){
   if(el&&!isNaN(d))el.textContent=`upd. ${pad(d.getDate())}.${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 })();
 (async()=>{
+  if(window.__gabRelay)return; // sign-in belongs to gabariti.html
   try{
     const last=localStorage.getItem('hvac_last_project');
     const sel=document.getElementById('project-sel');
