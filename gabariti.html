@@ -1034,9 +1034,13 @@ function suggestPG(dims){
   const spanX=Math.max(...xs)-Math.min(...xs),spanY=Math.max(...ys)-Math.min(...ys);
   const ax=spanX>=spanY?'sx':'sy',ox=ax==='sx'?'sy':'sx';
   const lo=Math.min(...dims.map(d=>d[ax])),hi=Math.max(...dims.map(d=>d[ax])),span=(hi-lo)||1;
-  // widths: overall-width dimensions written at each end of the module (end A = top/left, end B = bottom/right on screen)
+  // widths: overall-width dimensions written at each end of the module.
+  // End A = the "0" end of the length dimensions (the overall length label sits at the other end, end B).
   const wc=dims.filter(d=>d.v<G*0.7&&d.v>=Math.max(1500,G*0.1));
-  const endA=wc.filter(d=>(d[ax]-lo)/span<=0.05),endB=wc.filter(d=>(hi-d[ax])/span<=0.05);
+  const nearLo=d=>(d[ax]-lo)/span<=0.05,nearHi=d=>(hi-d[ax])/span<=0.05;
+  const gl=dims.filter(d=>d.v>=G*0.995),gLo=gl.filter(d=>(d[ax]-lo)/span<=0.25).length,gHi=gl.filter(d=>(hi-d[ax])/span<=0.25).length;
+  const aIsHi=gLo>gHi;
+  const endA=wc.filter(aIsHi?nearHi:nearLo),endB=wc.filter(aIsHi?nearLo:nearHi);
   const mx=a=>a.length?Math.max(...a.map(d=>d.v)):null;
   const P_A=mx(endA),P_B=mx(endB);
   const P=Math.max(P_A||0,P_B||0)||null;
@@ -1075,6 +1079,9 @@ async function attachPlan(mod,file,data,entry,opts={}){
   const sg=suggestPG(ex.dims);
   // fill drawing values only where nothing is entered yet; different ends/sides go into the per-point "Drawing" column
   const dk=data.design_k=data.design_k||{};
+  if(opts.update){ // replacing the plan: take the drawing values from the new plan
+    ['P','G'].forEach(g=>{data.design[g]=null;ACT.filter(x=>x.grp===g).forEach(x=>{dk[x.k]=null;});});
+  }
   const fill=(g,a,ka,b,kb,fb)=>{
     if(num(data.design[g])!==null||num(dk[ka])!==null||num(dk[kb])!==null)return;
     if(a&&b&&a!==b){data.design[g]=a;dk[kb]=b;sg.split=(sg.split||[]).concat(g);}
@@ -1089,7 +1096,10 @@ document.getElementById('plan-input').addEventListener('change',async e=>{
   setStatus('Uploading plan...');
   try{
     collectForm();
-    const r=await attachPlan(ctx.mod,f,ctx.data,ctx.entry,{check:true});
+    // a plan already exists or P/G are entered → ask whether the drawing values should come from the new plan
+    const hadPG=['P','G'].some(g=>num(ctx.data.design[g])!==null)||ACT.some(x=>x.grp!=='H'&&num((ctx.data.design_k||{})[x.k])!==null);
+    const update=hadPG&&confirm('Update the drawing values (P and G, incl. end A/B and side 1/2) from the new plan?\n\nOK = take them from the new plan\nCancel = keep the values entered now\n\nActual measured values and H are kept.');
+    const r=await attachPlan(ctx.mod,f,ctx.data,ctx.entry,{check:true,update});
     if(!r){setStatus('');return;}
     ctx.entry=await writeModuleJson(ctx.mod,ctx.data,ctx.entry);formDirty=false;
     renderForm();
