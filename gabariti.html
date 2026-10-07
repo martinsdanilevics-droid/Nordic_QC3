@@ -1032,10 +1032,20 @@ function suggestPG(dims){
   const G=Math.max(...dims.map(d=>d.v));
   const xs=dims.map(d=>d.sx),ys=dims.map(d=>d.sy);
   const spanX=Math.max(...xs)-Math.min(...xs),spanY=Math.max(...ys)-Math.min(...ys);
-  const ax=spanX>=spanY?'sx':'sy',lo=Math.min(...dims.map(d=>d[ax])),hi=Math.max(...dims.map(d=>d[ax])),span=(hi-lo)||1;
-  const cand=dims.filter(d=>d.v<G*0.7&&d.v>=Math.max(1500,G*0.1)&&Math.min(d[ax]-lo,hi-d[ax])/span<=0.05);
-  const P=cand.length?Math.max(...cand.map(d=>d.v)):null;
-  return {P,G};
+  const ax=spanX>=spanY?'sx':'sy',ox=ax==='sx'?'sy':'sx';
+  const lo=Math.min(...dims.map(d=>d[ax])),hi=Math.max(...dims.map(d=>d[ax])),span=(hi-lo)||1;
+  // widths: overall-width dimensions written at each end of the module (end A = top/left, end B = bottom/right on screen)
+  const wc=dims.filter(d=>d.v<G*0.7&&d.v>=Math.max(1500,G*0.1));
+  const endA=wc.filter(d=>(d[ax]-lo)/span<=0.05),endB=wc.filter(d=>(hi-d[ax])/span<=0.05);
+  const mx=a=>a.length?Math.max(...a.map(d=>d.v)):null;
+  const P_A=mx(endA),P_B=mx(endB);
+  const P=Math.max(P_A||0,P_B||0)||null;
+  // lengths: overall-length dimensions on the two long sides (side 1 = top/left, side 2 = bottom/right on screen)
+  const gc=dims.filter(d=>d.v>=G*0.995);
+  const ord=dims.map(d=>d[ox]).sort((a,b)=>a-b),mid=ord[Math.floor(ord.length/2)];
+  const s1=gc.filter(d=>d[ox]<mid),s2=gc.filter(d=>d[ox]>=mid);
+  const G_11=mx(s1),G_22=mx(s2);
+  return {P,G,P_A,P_B,G_11,G_22};
 }
 // Module name written in the drawing (title block "NAME OF MODULE") — returns the project module it matches
 function moduleFromTexts(texts,mods){
@@ -1063,8 +1073,15 @@ async function attachPlan(mod,file,data,entry,opts={}){
   ex.dims.forEach(d=>{const o=oldPts[d.key];points[d.key]=o?{...o,v:d.v}:{v:d.v,a:null};});
   data.plan={fileId:it.id,name:file.name,tol:data.plan&&data.plan.tol!=null?data.plan.tol:PLAN_TOL_DEFAULT,points,uploaded_at:new Date().toISOString()};
   const sg=suggestPG(ex.dims);
-  if(num(data.design.P)===null&&sg.P)data.design.P=sg.P;
-  if(num(data.design.G)===null&&sg.G)data.design.G=sg.G;
+  // fill drawing values only where nothing is entered yet; different ends/sides go into the per-point "Drawing" column
+  const dk=data.design_k=data.design_k||{};
+  const fill=(g,a,ka,b,kb,fb)=>{
+    if(num(data.design[g])!==null||num(dk[ka])!==null||num(dk[kb])!==null)return;
+    if(a&&b&&a!==b){data.design[g]=a;dk[kb]=b;sg.split=(sg.split||[]).concat(g);}
+    else data.design[g]=a||b||fb||null;
+  };
+  fill('P',sg.P_A,'P_A',sg.P_B,'P_B',sg.P);
+  fill('G',sg.G_11,'G_11',sg.G_22,'G_22',sg.G);
   return {n:ex.dims.length,sg};
 }
 document.getElementById('plan-input').addEventListener('change',async e=>{
@@ -1076,8 +1093,10 @@ document.getElementById('plan-input').addEventListener('change',async e=>{
     if(!r){setStatus('');return;}
     ctx.entry=await writeModuleJson(ctx.mod,ctx.data,ctx.entry);formDirty=false;
     renderForm();
-    setStatus(`Plan uploaded ✓ — ${r.n} dimensions found`);
+    const split=(r.sg.split||[]).map(g=>g==='P'?'two different widths (end A / end B)':'two different lengths (side 1 / side 2)').join(' and ');
+    setStatus(`Plan uploaded ✓ — ${r.n} dimensions found${split?' · '+split:''}`);
     showToast(`✓ Plan uploaded — ${r.n} dimensions`);
+    if(split)alert(`The plan shows ${split}.\nThey are filled in the "Drawing" column — please check that ends/sides A/B and 1/2 match how you measure.`);
   }catch(err){setStatus('Plan upload error: '+err.message);alert('Plan NOT uploaded: '+err.message);}
 });
 
