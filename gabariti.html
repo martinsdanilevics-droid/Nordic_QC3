@@ -184,6 +184,8 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .dim-table input{width:100%;min-width:64px;padding:8px 6px;border:1px solid #ddd;border-radius:7px;font-size:15px;text-align:center;background:#fff;font-family:inherit;}
 .dim-table input:focus{outline:none;border-color:#2d5a3d;box-shadow:0 0 0 2px #e8f5ec;}
 .dim-table input.design{background:#f7f7f7;}
+.dim-table input.dk{color:#7a4b00;font-size:14px;}
+.dim-table input.dk::placeholder{color:#aaa;}
 .dim-table .dv{font-weight:700;min-width:52px;display:inline-block;}
 .dim-table .dv.ok{color:#1f6b2a;}
 .dim-table .dv.bad{color:#c62828;}
@@ -226,8 +228,8 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .plan-pop .pp-dev{font-size:13px;font-weight:700;min-height:18px;text-align:center;}
 .plan-pop .pp-btns{display:flex;gap:6px;margin-top:8px;}
 .plan-pop .pp-btns button{flex:1;padding:10px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;}
-.plan-pop .pp-use{display:flex;gap:6px;margin-top:8px;}
-.plan-pop .pp-use button{flex:1;padding:6px;border-radius:6px;border:1px solid #ccd;background:#f7f8fa;font-size:11px;cursor:pointer;color:#333;}
+.plan-pop .pp-use{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.plan-pop .pp-use button{flex:1 1 45%;padding:6px;border-radius:6px;border:1px solid #ccd;background:#f7f8fa;font-size:11px;cursor:pointer;color:#333;}
 
 @media(max-width:760px){
   .dim-layout{grid-template-columns:1fr;}
@@ -330,7 +332,7 @@ const PROJECTS={
 };
 const TOL={P:7,G:7,H:3};               // QC-2 permissible deviations, mm
 const PLAN_TOL_DEFAULT=5;              // other dimensions measured on the plan, mm
-const MEASURERS=['Mārtiņš Danilevičs','Kristīne Daņiļeviča','Edgars Rumbenieks','Edgars Kutovskis','Andrejs Bekčevs','Kristians Vēveris-Bajinskis'];
+const MEASURERS=['Mārtiņš Danilevičs'];
 const QC_REP='Mārtiņš Danilevičs';
 const ADMIN_EMAIL='martins.danilevics@nordichomes.lv';
 const SUBFOLDER=' Dimensions QC-2';
@@ -362,12 +364,17 @@ function sgn(n){return n>0?'+'+n:String(n);}
 
 // ========== DIMENSION LOGIC ==========
 function emptyData(mod){
-  return {module:mod,project:currentProject,form:'QC-2',date:todayISO(),measured_by:'',qc_representative:QC_REP,
-    design:{P:null,G:null,H:null},actual:{},corners90:false,photos_taken:false,photos:[],notes:'',
+  return {module:mod,project:currentProject,form:'QC-2',date:todayISO(),measured_by:MEASURERS[0],qc_representative:QC_REP,
+    design:{P:null,G:null,H:null},design_k:{},actual:{},corners90:false,photos_taken:false,photos:[],notes:'',
     plan:null,result:'',saved_at:null};
 }
+// Drawing value for one measuring point: its own value (e.g. trapezoid module — end A differs from end B), else the common P/G/H
+function desOf(d,k){
+  const own=num(d.design_k&&d.design_k[k]);if(own!==null)return own;
+  return num(d.design&&d.design[k.split('_')[0]]);
+}
 function devOf(d,k){
-  const g=k.split('_')[0],des=num(d.design&&d.design[g]),a=num(d.actual&&d.actual[k]);
+  const des=desOf(d,k),a=num(d.actual&&d.actual[k]);
   if(des===null||a===null)return null;
   return Math.round((a-des)*10)/10;
 }
@@ -596,6 +603,7 @@ async function loadProject(){
     modData[pk]=fresh;saveCache();lastSync=Date.now();
     setStatus(failed?`Loaded — ${failed} module(s) could not be read`:'Loaded ✓');
     renderOverview();
+    if(deepLink&&!ctx)openDeepLink();
   }catch(e){setStatus('Load error: '+e.message);console.error(e);}
   loading=false;
   if(reloadQueued||pk!==currentProject){reloadQueued=false;loadProject();}
@@ -693,7 +701,9 @@ function renderForm(){
   const d=ctx.data,des=d.design||{};
   const hHint=(des.H===null||des.H===undefined||des.H==='')&&mostCommonH()!==null?`<div class="hint">Other modules: H = ${mostCommonH()} mm · <a href="#" onclick="event.preventDefault();setDesign('H',${mostCommonH()})">use</a></div>`:'';
   const opt=(v)=>MEASURERS.map(n=>`<option ${n===v?'selected':''}>${esc(n)}</option>`).join('');
+  const dk=d.design_k||{};
   const rows=ACT.map(x=>`<tr><td class="lbl">${x.lbl}</td>
+      <td><input class="design dk" type="number" inputmode="decimal" id="dk-${x.k}" value="${dk[x.k]??''}" placeholder="${des[x.grp]??''}" oninput="onDesignK('${x.k}',this.value)"/></td>
       <td><input type="number" inputmode="decimal" id="a-${x.k}" value="${d.actual[x.k]??''}" oninput="onActual('${x.k}',this.value)"/></td>
       <td><span class="dv" id="dv-${x.k}"></span></td><td class="tol">±${TOL[x.grp]}</td></tr>`).join('');
   const ps=d.plan&&d.plan.fileId?planStats(d):null;
@@ -704,7 +714,7 @@ function renderForm(){
         <div class="form-group"><label>Project</label><input value="${esc(proj().label)}" disabled/></div>
         <div class="form-group"><label>Module No.</label><input value="${esc(ctx.mod)}" disabled/></div>
         <div class="form-group"><label>Date</label><input type="date" id="f-date" value="${esc(d.date||todayISO())}"/></div>
-        <div class="form-group"><label>Measured by</label><select id="f-by"><option value="">— Select —</option>${opt(d.measured_by)}</select></div>
+        <div class="form-group"><label>Measured by</label><select id="f-by">${opt(d.measured_by||MEASURERS[0])}</select></div>
       </div></div>
 
     <div class="form-card"><h3>2. External dimensions of the module (mm)</h3>
@@ -718,11 +728,12 @@ function renderForm(){
             <tr><td class="lbl">H — height</td><td><input class="design" type="number" inputmode="decimal" id="d-H" value="${des.H??''}" oninput="onDesign('H',this.value)"/></td><td class="tol">±${TOL.H}</td></tr>
           </table>
           ${hHint}
-          ${d.plan&&d.plan.fileId?`<div class="hint">P and G can be set from the plan: tap the dimension → "Use as P / G".</div>`:''}
+          <div class="hint">Not a rectangle (e.g. trapezoid)? Enter the drawing value of that end/side/corner in the "Drawing" column — empty = the common value above.</div>
+          ${d.plan&&d.plan.fileId?`<div class="hint">P and G can be set from the plan: tap the dimension → "Use as".</div>`:''}
         </div>
         <div>
           <table class="dim-table">
-            <tr><th>Actual dimensions</th><th>mm</th><th>Deviation</th><th>Tol.</th></tr>
+            <tr><th>Measured at</th><th>Drawing</th><th>Actual mm</th><th>Deviation</th><th>Tol.</th></tr>
             ${rows}
           </table>
         </div>
@@ -762,8 +773,9 @@ function renderForm(){
   ACT.forEach(x=>updateDev(x.k));
   updateResult();renderPhotos();
 }
-function setDesign(g,v){ctx.data.design[g]=v;const el=document.getElementById('d-'+g);if(el)el.value=v;formDirty=true;ACT.filter(x=>x.grp===g).forEach(x=>updateDev(x.k));updateResult();}
-function onDesign(g,v){ctx.data.design[g]=num(v);ACT.filter(x=>x.grp===g).forEach(x=>updateDev(x.k));updateResult();}
+function setDesign(g,v){ctx.data.design[g]=v;const el=document.getElementById('d-'+g);if(el)el.value=v;formDirty=true;ACT.filter(x=>x.grp===g).forEach(x=>{const e=document.getElementById('dk-'+x.k);if(e)e.placeholder=v;updateDev(x.k);});updateResult();}
+function onDesign(g,v){ctx.data.design[g]=num(v);ACT.filter(x=>x.grp===g).forEach(x=>{const e=document.getElementById('dk-'+x.k);if(e)e.placeholder=v;updateDev(x.k);});updateResult();}
+function onDesignK(k,v){(ctx.data.design_k=ctx.data.design_k||{})[k]=num(v);updateDev(k);updateResult();}
 function onActual(k,v){ctx.data.actual[k]=num(v);updateDev(k);updateResult();}
 function updateDev(k){
   const el=document.getElementById('dv-'+k);if(!el)return;
@@ -1117,7 +1129,10 @@ function openPop(dim,marker){
     <div class="pp-dev" id="pp-dev"></div>
     <div class="pp-btns"><button style="background:#f5f5f5;border:1px solid #ddd;color:#555" onclick="ppSave(null)">Clear</button>
       <button style="background:#2d5a3d;border:none;color:#fff" onclick="ppSave()">OK</button></div>
-    <div class="pp-use"><button onclick="useAsDesign('P',${dim.v})">Use as design P</button><button onclick="useAsDesign('G',${dim.v})">Use as design G</button></div>`;
+    <div class="pp-use"><div style="font-size:10px;color:#888;width:100%">Use as drawing value:</div>
+      <button onclick="useAsDesign('P',${dim.v})">P (both ends)</button><button onclick="useAsDesign('G',${dim.v})">G (both sides)</button>
+      <button onclick="useAsDesignK('P_A',${dim.v})">P end A</button><button onclick="useAsDesignK('P_B',${dim.v})">P end B</button>
+      <button onclick="useAsDesignK('G_11',${dim.v})">G side 1</button><button onclick="useAsDesignK('G_22',${dim.v})">G side 2</button></div>`;
   document.body.appendChild(pop);
   const r=marker.getBoundingClientRect();
   let left=Math.min(innerWidth-270,Math.max(10,r.left+r.width/2-130)),top=r.bottom+10;
@@ -1136,7 +1151,8 @@ function ppSave(val){
   d.plan.points[dim.key]={v:dim.v,a};
   formDirty=true;closePop();drawMarkers();
 }
-function useAsDesign(g,v){ctx.data.design[g]=v;formDirty=true;showToast(`Design ${g} = ${v} mm`);}
+function useAsDesign(g,v){ctx.data.design[g]=v;formDirty=true;showToast(`Drawing ${g} = ${v} mm`);}
+function useAsDesignK(k,v){(ctx.data.design_k=ctx.data.design_k||{})[k]=v;formDirty=true;showToast(`Drawing ${ACT.find(x=>x.k===k).lbl} = ${v} mm`);}
 function onPlanTolChange(){const t=num(document.getElementById('plan-tol').value);ctx.data.plan.tol=t===null?PLAN_TOL_DEFAULT:t;formDirty=true;drawMarkers();}
 document.getElementById('plan-scroll').addEventListener('click',e=>{if(!e.target.closest('.pm'))closePop();});
 window.addEventListener('resize',()=>{if(plan)renderPlan();});
@@ -1200,8 +1216,8 @@ async function buildProtocolHtml(d,opts={}){
   const des=d.design||{};
   const cell=(k)=>{const v=num(d.actual[k]);const dv=devOf(d,k),t=TOL[k.split('_')[0]];
     return `<td>${v===null?'—':v}</td><td style="font-weight:700;color:${dv===null?'#999':Math.abs(dv)<=t?'#1f6b2a':'#c62828'}">${dv===null?'—':sgn(dv)}</td>`;};
-  const row=(g,label,keys)=>keys.map((k,i)=>`<tr>${i===0?`<td rowspan="${keys.length}" class="g"><b>${g}</b><br><span>${label}</span></td><td rowspan="${keys.length}">${des[g]??'—'}</td><td rowspan="${keys.length}">±${TOL[g]} mm</td>`:''}
-     <td class="k">${ACT.find(x=>x.k===k).lbl.split('— ')[1]}</td>${cell(k)}</tr>`).join('');
+  const row=(g,label,keys)=>keys.map((k,i)=>`<tr>${i===0?`<td rowspan="${keys.length}" class="g"><b>${g}</b><br><span>${label}</span></td>`:''}
+     <td class="k">${ACT.find(x=>x.k===k).lbl.split('— ')[1]}</td><td>${desOf(d,k)??'—'}</td>${i===0?`<td rowspan="${keys.length}">±${TOL[g]} mm</td>`:''}${cell(k)}</tr>`).join('');
   let photos='';
   if(opts.withPhotos&&(d.photos||[]).length){
     const imgs=[];for(const p of d.photos){if(p.id){const s=await photoDataUrl(p.id);if(s)imgs.push(s);}}
@@ -1234,7 +1250,7 @@ async function buildProtocolHtml(d,opts={}){
   <div class="row"><span class="lbl">Date</span><span class="val">${fmtD(d.date)}</span></div>
   <div class="sec">1. External dimensions of the module (mm)</div>
   <div class="sk">${sketchSVG()}</div>
-  <table><tr><th>Dim.</th><th>According to drawings</th><th>Permissible</th><th>Measured at</th><th>Actual</th><th>Deviation</th></tr>
+  <table><tr><th>Dim.</th><th>Measured at</th><th>According to drawings</th><th>Permissible</th><th>Actual</th><th>Deviation</th></tr>
     ${row('P','width',['P_A','P_B'])}${row('G','length',['G_11','G_22'])}${row('H','height',['H_A1','H_A2','H_B1','H_B2'])}</table>
   ${ps&&ps.n?`<div style="margin-top:6px;font-size:10.5px;color:#555">Additionally measured on the assembly plan: ${ps.n} dimension(s)${ps.bad?`, <b style="color:#c62828">${ps.bad} out of ±${planTol(d)} mm</b>`:`, all within ±${planTol(d)} mm`} — see "${esc(slug(d.module))}_plan_measured.pdf".</div>`:''}
   <div class="sec">2. Checks</div>
@@ -1312,6 +1328,22 @@ async function bulkUpload(rows){
   const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
   if(el&&!isNaN(d))el.textContent=`upd. ${p(d.getDate())}.${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 })();
+// Deep link from the QC3 checklist: gabariti.html?project=ISL_Holaborg&module=HLB%201-1 (kept through sign-in)
+let deepLink=null;
+(function readDeepLink(){
+  const q=new URLSearchParams(location.search);let pj=q.get('project'),md=q.get('module');
+  if(!pj&&!md){try{const s=JSON.parse(sessionStorage.getItem('gab_deeplink')||'null');if(s){pj=s.project;md=s.module;}}catch(e){}}
+  else{try{sessionStorage.setItem('gab_deeplink',JSON.stringify({project:pj,module:md}));}catch(e){}
+    const u=new URL(location.href);u.searchParams.delete('project');u.searchParams.delete('module');history.replaceState({},'',u.toString());}
+  if(pj&&PROJECTS[pj]){try{localStorage.setItem('gab_last_project',pj);}catch(e){}
+    if(md&&PROJECTS[pj].modules.includes(md))deepLink={project:pj,module:md};}
+})();
+function openDeepLink(){
+  if(!deepLink||!msConnected)return;
+  const dl=deepLink;deepLink=null;try{sessionStorage.removeItem('gab_deeplink');}catch(e){}
+  if(currentProject!==dl.project)return;
+  openModule(dl.module);
+}
 (async()=>{
   fillProjectSelect();
   if(loadCache())renderOverview();else renderOverview();
