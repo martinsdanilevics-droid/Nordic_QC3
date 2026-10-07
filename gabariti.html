@@ -783,7 +783,10 @@ function onDesignK(k,v){(ctx.data.design_k=ctx.data.design_k||{})[k]=num(v);upda
 function onActual(k,v){
   ctx.data.actual[k]=num(v);
   // keep the linked plan dimension in step with the table
-  const pts=ctx.data.plan&&ctx.data.plan.points;if(pts)Object.values(pts).forEach(x=>{if(x.link===k){x.a=num(v);if(x.a===null)delete x.link;}});
+  const pts=ctx.data.plan&&ctx.data.plan.points;
+  if(pts)Object.values(pts).forEach(x=>{const ls=linksOf(x);if(!ls.includes(k))return;
+    if(ls.length===1){x.a=num(v);if(x.a===null)delete x.link;}       // one field: plan follows the table
+    else{const r=ls.filter(z=>z!==k);x.link=r.join(',');}});           // filled both sides: this side is now its own value
   updateDev(k);updateResult();
 }
 function updateDev(k){
@@ -1219,32 +1222,54 @@ function openPop(dim,marker){
   upd();setTimeout(()=>inp.focus(),50);
   pop._dim=dim;
 }
-function ppSave(val){
+function linksOf(pt){return String((pt&&pt.link)||'').split(',').filter(Boolean);}
+const lblOf=k=>ACT.find(x=>x.k===k).lbl;
+function ppSave(val,forceTgt){
   const pop=document.getElementById('plan-pop');if(!pop)return;
   const dim=pop._dim,d=ctx.data;
   const a=val===null?null:num(pop.querySelector('#pp-in').value);
   const old=d.plan.points[dim.key]||{};
-  const tgt=val===null?'':pop.querySelector('#pp-tgt').value;
-  // the QC-2 table field this plan dimension fills (overall width/length measured on the plan)
-  if(old.link&&old.link!==tgt&&num(d.actual[old.link])===num(old.a))d.actual[old.link]=null;
-  const pt={v:dim.v,a};if(tgt&&a!==null){pt.link=tgt;d.actual[tgt]=a;}
+  const tgt=val===null?'':(forceTgt??pop.querySelector('#pp-tgt').value);
+  const nl=a===null?[]:tgt.split(',').filter(Boolean);
+  // table fields this plan dimension filled before but no longer does: clear them if they still hold its value
+  linksOf(old).forEach(k=>{if(!nl.includes(k)&&num(d.actual[k])===num(old.a))d.actual[k]=null;});
+  const pt={v:dim.v,a};
+  if(nl.length){pt.link=nl.join(',');nl.forEach(k=>d.actual[k]=a);}
   d.plan.points[dim.key]=pt;
   formDirty=true;closePop();drawMarkers();
-  if(pt.link)showToast(`✓ ${a} mm → table: ${ACT.find(x=>x.k===pt.link).lbl}`);
+  if(nl.length)showToast(`✓ ${a} mm → table: ${nl.map(lblOf).join(' + ')}`);
 }
 // Which QC-2 table fields can take this plan dimension: those whose drawing value equals it (first one still free is suggested)
 function tgtOptions(dim,p){
   const d=ctx.data,pts=d.plan.points;
-  const usedBy=k=>Object.entries(pts).some(([key,x])=>key!==dim.key&&x.link===k);
+  const usedBy=k=>Object.entries(pts).some(([key,x])=>key!==dim.key&&linksOf(x).includes(k));
   const match=ACT.filter(x=>desOf(d,x.k)===dim.v);
   let sel=p.link||'';
   if(!sel){const free=match.find(x=>!usedBy(x.k)&&num(d.actual[x.k])===null)||match.find(x=>!usedBy(x.k));sel=free?free.k:'';}
   const others=ACT.filter(x=>!match.includes(x));
   const o=x=>`<option value="${x.k}" ${x.k===sel?'selected':''}>${esc(x.lbl)}${usedBy(x.k)?' (used)':''}</option>`;
-  return `<option value="">— not in table —</option>${match.map(o).join('')}${others.length?`<optgroup label="Other">${others.map(o).join('')}</optgroup>`:''}`;
+  const both=[['P_A,P_B','P — both ends'],['G_11,G_22','G — both sides']].map(([v,l])=>`<option value="${v}" ${v===sel?'selected':''}>${l}</option>`).join('');
+  return `<option value="">— not in table —</option>${match.map(o).join('')}${both}${others.length?`<optgroup label="Other">${others.map(o).join('')}</optgroup>`:''}`;
 }
-function useAsDesign(g,v){ctx.data.design[g]=v;formDirty=true;showToast(`Drawing ${g} = ${v} mm`);}
-function useAsDesignK(k,v){(ctx.data.design_k=ctx.data.design_k||{})[k]=v;formDirty=true;showToast(`Drawing ${ACT.find(x=>x.k===k).lbl} = ${v} mm`);}
+// "Use as drawing value" buttons: set the drawing value(s) and, when an actual value is typed, put it into the same table field(s)
+function useAsDesign(g,v){
+  const d=ctx.data;d.design[g]=v;
+  const keys=ACT.filter(x=>x.grp===g).map(x=>x.k);
+  if(d.design_k)keys.forEach(k=>{d.design_k[k]=null;}); // same value on both ends/sides
+  formDirty=true;usePick(keys,`Drawing ${g} = ${v} mm`);
+}
+function useAsDesignK(k,v){
+  (ctx.data.design_k=ctx.data.design_k||{})[k]=v;formDirty=true;usePick([k],`Drawing ${lblOf(k)} = ${v} mm`);
+}
+function usePick(keys,msg){
+  const pop=document.getElementById('plan-pop');
+  const a=pop?num(pop.querySelector('#pp-in').value):null;
+  if(pop&&a!==null){ppSave(undefined,keys.join(','));showToast(`${msg} · ✓ ${a} mm → ${keys.map(lblOf).join(' + ')}`);return;}
+  if(pop){const sel=pop.querySelector('#pp-tgt');const v=keys.join(',');
+    if(![...sel.options].some(o=>o.value===v)){const o=document.createElement('option');o.value=v;o.textContent=keys.map(lblOf).join(' + ');sel.appendChild(o);}
+    sel.value=v;pop.querySelector('#pp-in').focus();}
+  showToast(msg+(pop?' — now enter the actual value':''));
+}
 function onPlanTolChange(){const t=num(document.getElementById('plan-tol').value);ctx.data.plan.tol=t===null?PLAN_TOL_DEFAULT:t;formDirty=true;drawMarkers();}
 document.getElementById('plan-scroll').addEventListener('click',e=>{if(!e.target.closest('.pm'))closePop();});
 window.addEventListener('resize',()=>{if(plan)renderPlan();});
