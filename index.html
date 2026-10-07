@@ -809,6 +809,41 @@ function sectionColor(section){
 }
 
 // ---- RENDER ----
+// ---- QC-2 dimensions app (gabariti.html) — link + result from its OneDrive file ----
+const QC2_APP='gabariti.html';
+const qc2Cache={}; // 'project|module' -> {result,date} | 'none' | 'loading' | 'err'
+function isQC2Item(i){return /Form No\.?\s*QC-2\b/i.test(i.desc||'');}
+function qc2Link(mod){return `${QC2_APP}?project=${encodeURIComponent(currentProject)}&module=${encodeURIComponent(mod)}`;}
+function qc2BadgeHtml(mod){
+  const c=qc2Cache[currentProject+'|'+mod];
+  const st='display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;';
+  if(!c||c==='loading')return `<span style="${st}color:#999">QC-2 …</span>`;
+  if(c==='none')return `<span style="${st}background:#f3f3f3;color:#888">QC-2 not measured</span>`;
+  if(c==='err')return '';
+  const r=c.result,d=c.date?(' · '+c.date.split('-').reverse().join('.')):'';
+  if(r==='Approved')return `<span style="${st}background:#e3f4e6;color:#1f6b2a">QC-2 Approved${d}</span>`;
+  if(r==='Not approved')return `<span style="${st}background:#fde4e4;color:#c62828">QC-2 Not approved${d}</span>`;
+  return `<span style="${st}background:#fff8e8;color:#9a6b00">QC-2 incomplete${d}</span>`;
+}
+async function loadQC2Status(mod,force){
+  const key=currentProject+'|'+mod;
+  if(!msConnected||(!force&&qc2Cache[key]&&qc2Cache[key]!=='err'))return;
+  qc2Cache[key]='loading';
+  try{
+    const cfg=getProjectCfg(),seg=[ 'Nordic_QC3',cfg.folder,mod,mod+' Dimensions QC-2',mod.replace(/[ -]/g,'')+'_QC-2.json'].map(encodeURIComponent).join('/');
+    let r=await graphRequest(`/me/drive/root:/${seg}:/content`);
+    if(r&&typeof r.text==='function')r=JSON.parse(await r.text());
+    qc2Cache[key]={result:(r&&r.result)||'',date:(r&&r.date)||''};
+  }catch(e){qc2Cache[key]=/ 404/.test(e.message)?'none':'err';}
+  const el=document.getElementById('qc2-status');
+  if(el&&currentModule===mod)el.innerHTML=qc2BadgeHtml(mod);
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&currentModule&&document.getElementById('qc2-status'))loadQC2Status(currentModule,true);});
+function openQC2(mod){
+  qc2Cache[currentProject+'|'+mod]=null; // re-read the result when coming back
+  window.open(qc2Link(mod),'_blank');
+}
+
 function render(){
   const mod=getModState();if(!mod)return;
   const list=document.getElementById('checklist');
@@ -837,6 +872,7 @@ function render(){
         <button class="btn-reject ${i.status==='rejected'?'active':''}" onclick="setItemStatus(${i.id},'rejected')" ${canChange?'':'disabled style="opacity:0.5;cursor:not-allowed"'}>&#10007; Rejected</button>
         <button class="btn-na ${i.status==='na'?'active':''}" onclick="setItemStatus(${i.id},'na')" ${canChange?'':'disabled style="opacity:0.5;cursor:not-allowed"'}>N/A</button>
         <button class="btn-photo" onclick="openPhotoUpload(${i.id})">&#128247; Photo (${(i.photoIds||[]).filter(Boolean).length+(i.photoPreviews||[]).filter(p=>p.uploading).length})</button>
+        ${isQC2Item(i)?`<button class="btn-photo" style="border-style:solid;border-color:#2d5a3d;color:#2d5a3d;font-weight:700" onclick="openQC2('${escH(currentModule)}')">&#128208; QC-2 dimensions</button><span id="qc2-status">${qc2BadgeHtml(currentModule)}</span>`:''}
         ${i.status==='accepted'?`<input type="date" style="padding:4px 8px;border:1px solid #1D9E75;border-radius:7px;font-size:11px;color:#1D9E75;background:#f0faf5;font-family:Arial" value="${dateToISO(i.acceptedDate)}" onchange="setItemDateFromInput(${i.id},'acceptedDate',this.value)" ${canChange?'':'disabled'}/>`:''} 
         ${i.status==='rejected'?`<input type="date" style="padding:4px 8px;border:1px solid #E24B4A;border-radius:7px;font-size:11px;color:#E24B4A;background:#fef0f0;font-family:Arial" value="${dateToISO(i.rejectedDate)}" onchange="setItemDateFromInput(${i.id},'rejectedDate',this.value)" ${canChange?'':'disabled'}/>`:''} 
         <input class="notes-inp" type="text" placeholder="Notes..." value="${escH(i.notes)}" onchange="setNotes(${i.id},this.value)"/>
@@ -862,6 +898,7 @@ function render(){
   list.innerHTML=html||'<p style="color:#aaa;padding:20px;text-align:center">No matching items</p>';
   // Load thumbnails via Graph API with token
   loadThumbnails();
+  if(currentModule&&document.getElementById('qc2-status'))loadQC2Status(currentModule);
   const addForm=document.getElementById('add-item-form');
   if(addForm)addForm.style.display=isRestricted()?'none':'block';
   updateStats();
