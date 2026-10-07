@@ -211,7 +211,8 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
 .plan-bar .cnt{font-size:12px;opacity:.9;}
 .plan-bar label{font-size:12px;opacity:.9;display:flex;align-items:center;gap:4px;}
 .plan-bar input{width:52px;padding:5px;border-radius:5px;border:none;font-size:13px;text-align:center;}
-.plan-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;position:relative;}
+.plan-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;position:relative;touch-action:pan-x pan-y;}
+.plan-stage canvas.sharp{position:absolute;pointer-events:none;}
 .plan-stage{position:relative;margin:12px auto;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35);}
 .plan-stage canvas{display:block;}
 .pm{position:absolute;border:2px dashed rgba(37,99,235,.55);border-radius:4px;cursor:pointer;background:rgba(37,99,235,.06);}
@@ -284,6 +285,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
     <span class="cnt" id="plan-count"></span>
     <span style="flex:1"></span>
     <label>Tolerance ±<input type="number" id="plan-tol" min="0" step="1" onchange="onPlanTolChange()"/> mm</label>
+    <button onclick="planRotate()" title="Rotate plan">⟳</button>
     <button onclick="planZoom(1/1.4)">−</button>
     <button onclick="planZoom(0)">Fit</button>
     <button onclick="planZoom(1.4)">+</button>
@@ -1049,7 +1051,9 @@ async function openPlan(){
     const ex=await extractDims(bytes);
     // keep stored values; add points that were not known yet
     ex.dims.forEach(x=>{if(!d.plan.points[x.key])d.plan.points[x.key]={v:x.v,a:null};});
-    plan={doc,page,dims:ex.dims,zoom:1};
+    const b0=page.getViewport({scale:1});
+    let pref=90;try{const v=localStorage.getItem('gab_plan_rot');if(v!==null)pref=+v;}catch(e){}
+    plan={doc,page,dims:ex.dims,zoom:1,landscape:b0.width>b0.height,extra:b0.width>b0.height?pref:0};
     await renderPlan();
   }catch(e){stage.innerHTML=`<div style="padding:40px;color:#c62828">Could not open the plan: ${esc(e.message)}</div>`;}
 }
@@ -1058,27 +1062,90 @@ function closePlan(){
   if(plan){try{plan.task&&plan.task.cancel();}catch(e){}const d=plan.doc;setTimeout(()=>{try{d.destroy();}catch(e){}},0);}
   plan=null;document.getElementById('plan-stage').innerHTML='';if(ctx)renderForm();
 }
-function planZoom(f){if(!plan)return;plan.zoom=f===0?1:Math.max(0.5,Math.min(6,plan.zoom*f));renderPlan();}
-async function renderPlan(){
+// Zoom keeps the point in the middle of the screen (or under the fingers) in place
+function planZoom(f,focus){
+  if(!plan)return;
+  const old=plan.zoom;plan.zoom=f===0?1:Math.max(0.5,Math.min(8,plan.zoom*f));
   const sc=document.getElementById('plan-scroll'),stage=document.getElementById('plan-stage');
-  const base=plan.page.getViewport({scale:1});
+  if(!focus){focus={cx:sc.clientWidth/2,cy:sc.clientHeight/2};}
+  focus.sx=(sc.scrollLeft+focus.cx-stage.offsetLeft)/old;focus.sy=(sc.scrollTop+focus.cy-stage.offsetTop)/old;
+  renderPlan(f===0?null:focus);
+}
+// Landscape plans open in portrait (rotated) — easier on a tablet; ⟳ turns further and is remembered
+function planRotate(){
+  if(!plan)return;plan.extra=(plan.extra+90)%360;
+  if(plan.landscape)try{localStorage.setItem('gab_plan_rot',String(plan.extra));}catch(e){}
+  closePop();renderPlan();
+}
+function planViewport(scale,extra={}){return plan.page.getViewport({scale,rotation:(plan.page.rotate+plan.extra)%360,...extra});}
+const PLAN_MAX_PX=3000*3000; // whole-page bitmap limit (tablet memory); the visible part is redrawn sharp on top
+async function renderPlan(focus){
+  const sc=document.getElementById('plan-scroll'),stage=document.getElementById('plan-stage');
+  const base=planViewport(1);
   const fit=(sc.clientWidth-24)/base.width;
   const scale=fit*plan.zoom;
-  const vp=plan.page.getViewport({scale});
-  const dpr=Math.min(window.devicePixelRatio||1,2);
-  let rs=scale*dpr;const maxPx=4096*4096; if(base.width*base.height*rs*rs>maxPx)rs=Math.sqrt(maxPx/(base.width*base.height));
-  const rvp=plan.page.getViewport({scale:rs});
+  const vp=planViewport(scale);
+  const dpr=Math.min(window.devicePixelRatio||1,3);
+  let rs=scale*dpr;if(base.width*base.height*rs*rs>PLAN_MAX_PX)rs=Math.sqrt(PLAN_MAX_PX/(base.width*base.height));
+  const rvp=planViewport(rs);
   const cv=document.createElement('canvas');cv.width=Math.floor(rvp.width);cv.height=Math.floor(rvp.height);
   cv.style.width=vp.width+'px';cv.style.height=vp.height+'px';
+  if(plan.task)try{plan.task.cancel();}catch(e){}
+  if(plan.sharpTask)try{plan.sharpTask.cancel();}catch(e){}
+  stage.style.transform='';
   stage.style.width=vp.width+'px';stage.style.height=vp.height+'px';
   stage.innerHTML='';stage.appendChild(cv);
-  plan.vp=vp;
+  plan.vp=vp;plan.scale=scale;plan.dpr=dpr;plan.full=rs>=scale*dpr*0.99;
+  if(focus){sc.scrollLeft=focus.sx*plan.zoom+stage.offsetLeft-focus.cx;sc.scrollTop=focus.sy*plan.zoom+stage.offsetTop-focus.cy;}
   drawMarkers();
-  if(plan.task)try{plan.task.cancel();}catch(e){}
   const my=plan,task=plan.page.render({canvasContext:cv.getContext('2d'),viewport:rvp});my.task=task;
   try{await task.promise;}catch(e){if(e&&e.name!=='RenderingCancelledException')throw e;}
   if(my.task===task)my.task=null;
+  if(plan===my)renderSharp();
 }
+// Redraw only the visible part of the plan at full screen resolution (sharp numbers and thin lines when zoomed)
+let sharpTimer=null;
+function scheduleSharp(){clearTimeout(sharpTimer);sharpTimer=setTimeout(renderSharp,160);}
+async function renderSharp(){
+  if(!plan||!plan.vp||plan.full)return;
+  const sc=document.getElementById('plan-scroll'),stage=document.getElementById('plan-stage');
+  const W=plan.vp.width,H=plan.vp.height;
+  const x0=Math.max(0,Math.floor(sc.scrollLeft-stage.offsetLeft)),y0=Math.max(0,Math.floor(sc.scrollTop-stage.offsetTop));
+  const x1=Math.min(W,Math.ceil(sc.scrollLeft-stage.offsetLeft+sc.clientWidth)),y1=Math.min(H,Math.ceil(sc.scrollTop-stage.offsetTop+sc.clientHeight));
+  if(x1<=x0||y1<=y0)return;
+  const d=plan.dpr,w=x1-x0,h=y1-y0;
+  const cv=document.createElement('canvas');cv.className='sharp';cv.width=Math.ceil(w*d);cv.height=Math.ceil(h*d);
+  cv.style.cssText=`left:${x0}px;top:${y0}px;width:${w}px;height:${h}px`;
+  if(plan.sharpTask)try{plan.sharpTask.cancel();}catch(e){}
+  const my=plan,task=plan.page.render({canvasContext:cv.getContext('2d'),viewport:planViewport(plan.scale*d,{offsetX:-x0*d,offsetY:-y0*d})});my.sharpTask=task;
+  try{await task.promise;}catch(e){return;}
+  if(plan!==my||my.sharpTask!==task)return;
+  my.sharpTask=null;
+  stage.querySelectorAll('canvas.sharp').forEach(c=>c.remove());
+  stage.insertBefore(cv,stage.children[1]||null);
+}
+document.getElementById('plan-scroll').addEventListener('scroll',()=>{if(plan)scheduleSharp();},{passive:true});
+// Two-finger pinch zoom on the plan (the page itself does not zoom)
+(function pinch(){
+  const sc=document.getElementById('plan-scroll');let st=null;
+  const dist=t=>Math.hypot(t[0].clientX-t[1].clientX,t[0].clientY-t[1].clientY);
+  sc.addEventListener('touchstart',e=>{
+    if(!plan||e.touches.length!==2)return;
+    const r=sc.getBoundingClientRect(),stage=document.getElementById('plan-stage');
+    const cx=(e.touches[0].clientX+e.touches[1].clientX)/2-r.left,cy=(e.touches[0].clientY+e.touches[1].clientY)/2-r.top;
+    st={d0:dist(e.touches),cx,cy,f:1,ox:sc.scrollLeft+cx-stage.offsetLeft,oy:sc.scrollTop+cy-stage.offsetTop};
+    stage.style.transformOrigin=`${st.ox}px ${st.oy}px`;
+  },{passive:true});
+  sc.addEventListener('touchmove',e=>{
+    if(!st||e.touches.length!==2)return;e.preventDefault();
+    st.f=Math.max(0.5/plan.zoom,Math.min(8/plan.zoom,dist(e.touches)/st.d0));
+    document.getElementById('plan-stage').style.transform=`scale(${st.f})`;
+  },{passive:false});
+  const end=()=>{if(!st)return;const s0=st;st=null;if(Math.abs(s0.f-1)<0.03){document.getElementById('plan-stage').style.transform='';return;}
+    closePop();planZoom(s0.f,{cx:s0.cx,cy:s0.cy});};
+  sc.addEventListener('touchend',e=>{if(e.touches.length<2)end();});
+  sc.addEventListener('touchcancel',end);
+})();
 // Rectangle of a text item in viewport (screen) coordinates
 function itemRect(n){
   const vp=plan.vp,r=n.rot*Math.PI/180,cos=Math.cos(r),sin=Math.sin(r);
