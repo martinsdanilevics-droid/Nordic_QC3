@@ -1032,18 +1032,24 @@ async function extractDims(bytes){
   const vp=page.getViewport({scale:1});
   const texts=tc.items.map(i=>i.str.trim()).filter(Boolean);
   const meta=await doc.getMetadata().catch(()=>({}));
-  const nums=tc.items.filter(i=>/^\d{2,5}$/.test(i.str.trim())&&+i.str>=10).map(i=>{
+  // window/door marks ("W : 990", "Hi: 2115") are sizes of openings, not dimension lines — skip the number that follows them
+  const its=tc.items.filter(i=>i.str.trim()),skip=new Set();
+  its.forEach((i,k)=>{if(/^(W|Hi|H)\s*:\s*$/i.test(i.str.trim())&&its[k+1])skip.add(its[k+1]);});
+  const nums=its.filter(i=>!skip.has(i)&&/^\d{2,5}$/.test(i.str.trim())&&+i.str>=10).map(i=>{
     const [a,b,,,e,f]=i.transform;const fs=Math.hypot(a,b);
     const [sx,sy]=vp.convertToViewportPoint(e,f);
     return {v:+i.str.trim(),x:e,y:f,rot:Math.round(Math.atan2(b,a)*180/Math.PI),fs,w:i.width,h:i.height||fs,sx,sy};
   });
   doc.destroy(); // free memory (tablets) — everything needed is copied above
   if(!nums.length)return {dims:[],meta,texts,pageW:vp.width,pageH:vp.height};
-  // dimension texts = the font size shared by most numbers (window/door labels or the title block may use bigger or smaller fonts)
+  // dimension texts = font sizes used by many numbers. Plan views and sections may use different sizes
+  // (e.g. 8.2 and 9.5), so every size group with at least 30% of the biggest group counts; the title block (1–2 numbers) does not.
   const near=(a,b)=>Math.abs(a-b)<=b*0.1;
-  let best=nums[0].fs,bestN=0;
-  nums.forEach(n=>{const c=nums.filter(m=>near(m.fs,n.fs)).length;if(c>bestN||(c===bestN&&n.fs>best)){best=n.fs;bestN=c;}});
-  const dims=nums.filter(n=>near(n.fs,best));
+  const groups=[];
+  [...nums].sort((a,b)=>a.fs-b.fs).forEach(n=>{const g=groups.find(g=>near(n.fs,g.fs));if(g)g.n++;else groups.push({fs:n.fs,n:1});});
+  const maxN=Math.max(...groups.map(g=>g.n));
+  const keep=groups.filter(g=>g.n>=Math.max(4,maxN*0.3));
+  const dims=nums.filter(n=>keep.some(g=>near(n.fs,g.fs)));
   const seen=new Set(),out=[];
   dims.forEach(n=>{const key=`${n.v}@${Math.round(n.x)},${Math.round(n.y)}`;if(seen.has(key))return;seen.add(key);out.push({...n,key});});
   return {dims:out,meta,texts,pageW:vp.width,pageH:vp.height};
@@ -1052,12 +1058,17 @@ async function extractDims(bytes){
 // G = the largest dimension. P = the largest "module width"-sized dimension that sits at the outer edge
 // of the drawing along the module's long axis (where the overall width dimension is drawn); details drawn
 // elsewhere on the sheet (e.g. a column elevation) are therefore ignored.
-function suggestPG(dims){
+function suggestPG(allDims){
+  let dims=allDims;
   if(!dims.length)return {};
   const G=Math.max(...dims.map(d=>d.v));
   const xs=dims.map(d=>d.sx),ys=dims.map(d=>d.sy);
   const spanX=Math.max(...xs)-Math.min(...xs),spanY=Math.max(...ys)-Math.min(...ys);
   const ax=spanX>=spanY?'sx':'sy',ox=ax==='sx'?'sy':'sx';
+  // the plan view = the band (across the module) where the overall length is dimensioned; sections/details elsewhere on the sheet are ignored
+  const gAll=dims.filter(d=>d.v>=G*0.995),fullSpan=Math.max(...dims.map(d=>d[ax]))-Math.min(...dims.map(d=>d[ax]))||1;
+  const b0=Math.min(...gAll.map(d=>d[ox]))-fullSpan*0.05,b1=Math.max(...gAll.map(d=>d[ox]))+fullSpan*0.05;
+  dims=dims.filter(d=>d[ox]>=b0&&d[ox]<=b1);
   const lo=Math.min(...dims.map(d=>d[ax])),hi=Math.max(...dims.map(d=>d[ax])),span=(hi-lo)||1;
   // widths: overall-width dimensions written at each end of the module.
   // End A = the "0" end of the length dimensions (the overall length label sits at the other end, end B).
