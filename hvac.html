@@ -1935,7 +1935,7 @@ async function generateAndUploadPDF(data,folder){
     const blob=await htmlToPdfBlob(pdfHtml,(k,n)=>setStatus(`📄 Creating PDF page ${k}/${n}...`));
     setStatus('📤 Uploading report to OneDrive...');
     const t=data.test_type||currentTestCtx.testType;
-    const mod=(data.module||'').replace(/[ -]/g,'');
+    const mod=(data.module||'').replace(/\s+/g,''); // HLB 1-2 → HLB1-2 (hyphen kept, so HLB 1-2 ≠ HLB 12)
     const dateStr=(data.date||todayISO()).replace(/-/g,'');
     const sysNo=data.system_no&&data.system_no!=='N/A'?'_'+data.system_no.replace(/\s/g,''):'';
     const scopeDefaults2={'QC-4.0':'Underfloor-Heating','QC-4.1':'Radiator-Heating','QC-4.2':'Sewer-Hydraulic','QC-5.0':'Concealed-Wall-Piping-Pneumatic','QC-5.1':'Collector-Piping-Pneumatic','QC-5.2':'Full-System-Pneumatic'};
