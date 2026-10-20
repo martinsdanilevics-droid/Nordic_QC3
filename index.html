@@ -1339,7 +1339,44 @@ function autoSave(modName){
 }
 
 // ---- EXPORT PROTOCOL ----
-function exportProtocol(){
+function blobToDataUrl(b){return new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.onerror=()=>r(null);f.readAsDataURL(b);});}
+async function buildPhotoAppendix(mod,modName){
+  const withPhotos=mod.items.filter(i=>(i.photoIds||[]).filter(Boolean).length>0);
+  if(!withPhotos.length||!msConnected)return '';
+  const ids=withPhotos.flatMap(i=>(i.photoIds||[]).filter(Boolean));
+  // links to the full-size photo in OneDrive
+  const web={};
+  try{
+    const fid=await ensureModuleFolder(modName);
+    let path=`/me/drive/items/${fid}/children?$select=id,webUrl&$top=999`;
+    while(path){const d=await graphRequest(path);(d.value||[]).forEach(x=>web[x.id]=x.webUrl);path=d['@odata.nextLink']?d['@odata.nextLink'].replace(GRAPH_BASE,''):null;}
+  }catch(e){console.warn('webUrls',e);}
+  // small thumbnails embedded as images (≈25 KB each)
+  const img={};let done=0;const queue=ids.slice();
+  const token=await ensureToken();
+  const worker=async()=>{while(queue.length){const id=queue.shift();
+    for(const size of ['c460x344','medium']){
+      try{const r=await fetch(`${GRAPH_BASE}/me/drive/items/${id}/thumbnails/0/${size}/content`,{headers:{Authorization:`Bearer ${token}`}});
+        if(r.ok){img[id]=await blobToDataUrl(await r.blob());break;}}catch(e){}
+    }
+    done++;if(done%10===0)setStatus(`Preparing protocol photos ${done}/${ids.length}...`);
+  }};
+  setStatus(`Preparing protocol photos 0/${ids.length}...`);
+  await Promise.all(Array.from({length:6},worker));
+  setStatus(`Protocol ready (${Object.keys(img).length} photos)`);
+  let h=`<div style="margin-top:48px;page-break-before:always"><h2 style="font-size:15px;font-weight:700;margin-bottom:18px;padding-bottom:8px;border-bottom:2px solid #333">Photo documentation — Appendix</h2>`;
+  withPhotos.forEach(i=>{
+    h+=`<div style="margin-bottom:28px"><p style="font-size:12px;font-weight:700;margin-bottom:4px">No. ${i.id} — ${escH(i.section)}</p><p style="font-size:11px;color:#555;margin-bottom:10px">${escH(i.desc)}</p><div style="display:flex;flex-wrap:wrap;gap:14px">`;
+    (i.photoIds||[]).filter(Boolean).forEach((id,idx)=>{
+      const link=web[id]||'';
+      const pic=img[id]?`<img src="${img[id]}" style="width:230px;height:172px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block"/>`:`<div style="width:230px;height:172px;border:1px dashed #ccc;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa">photo not available</div>`;
+      h+=`<figure style="margin:0;page-break-inside:avoid">${link?`<a href="${link}" target="_blank">${pic}</a>`:pic}<figcaption style="font-size:10px;color:#999;margin-top:3px;text-align:center">Photo ${idx+1}${link?` — <a href="${link}" target="_blank">Open in OneDrive</a>`:''}</figcaption></figure>`;
+    });
+    h+='</div></div>';
+  });
+  return h+'</div>';
+}
+async function exportProtocol(){
   if(!currentModule){alert('Please select a module first.');return;}
   const mod=getModState();
   const inspector=document.getElementById('inspector-input').value||'—';
@@ -1372,6 +1409,8 @@ function exportProtocol(){
     </tr>`;
   });
   const projLabel=getProjectCfg().label;
+  // Photo appendix: photos are embedded in the file (OneDrive photos need a sign-in, so links alone would not show them)
+  const photoSec=await buildPhotoAppendix(mod,currentModule);
   const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>QC-3 — ${currentModule}</title>
 <style>body{font-family:Arial,sans-serif;max-width:980px;margin:0 auto;padding:28px;color:#333}table{border-collapse:collapse;width:100%}th{background:#f0f0f0;font-size:10px;font-weight:700;padding:4px 6px;line-height:1.25;border:0.5px solid #ccc}td,th{vertical-align:top}tr{page-break-inside:avoid}@media print{body{padding:10px}@page{margin:15mm 12mm}}</style>
 </head><body>
@@ -1402,7 +1441,7 @@ ${openItems.length?`<div style="border:1px solid #EF9F27;background:#fffaf0;bord
 <span style="border:1px solid #333;padding:4px 14px;font-size:12px;font-weight:700;color:${overall==='NOT ACCEPTED'?'#E24B4A':'#333'}">${overall==='NOT ACCEPTED'?'☑':'☐'} NOT ACCEPTED</span>
 </div>
 <div style="margin-top:18px;border-top:1px solid #999;padding-top:6px;width:200px;font-size:11px;color:#777">Signature:</div></div>
-</body></html>`;
+${photoSec}</body></html>`;
   const blob=new Blob([html],{type:'text/html'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;
