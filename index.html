@@ -1549,15 +1549,30 @@ ${photoSec}</body></html>`;
 async function exportProtocol(){
   if(!currentModule){alert('Please select a module first.');return;}
   const modName=currentModule;
-  const p=await buildProtocol(modName);
-  // PDF (A4, ready to print); if the PDF cannot be made, the HTML protocol is downloaded instead
-  let blob=null,name=p.fileName;
-  try{setStatus('Creating PDF...');blob=await htmlToPdfBlob(p.html,(k,n)=>setStatus(`Creating PDF page ${k}/${n}...`));name=name.replace(/\.html$/,'.pdf');}
-  catch(e){console.warn('pdf',e);blob=new Blob([p.html],{type:'text/html'});}
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
-  setStatus('Protocol ready ✓');
-  if(msConnected&&p.overall==='ACCEPTED'&&blob.type==='application/pdf')uploadProtocol(modName,p.html,blob).catch(e=>console.warn(e));
+  // the PDF opens in a new tab when ready (window opened now, otherwise the browser blocks it)
+  const win=window.open('','_blank');
+  if(win)win.document.write('<p style="font-family:Arial;padding:30px;color:#555">Creating the QC-3 protocol (PDF)… this can take a minute with many photos.</p>');
+  try{
+    setStatus('Preparing protocol...');
+    const p=await buildProtocol(modName);
+    let blob;
+    try{blob=await htmlToPdfBlob(p.html,(k,n)=>setStatus(`Creating PDF page ${k}/${n}...`));}
+    catch(e){ // PDF not possible → HTML protocol as before
+      console.warn('pdf',e);const u=URL.createObjectURL(new Blob([p.html],{type:'text/html'}));
+      if(win)win.location=u;else{const a=document.createElement('a');a.href=u;a.download=p.fileName;a.click();}
+      setStatus('PDF could not be created — HTML protocol opened');return;
+    }
+    // always saved to the module's OneDrive folder (one current protocol, earlier ones → VECS)
+    let saved=false;
+    if(msConnected){
+      try{setStatus('Saving protocol to OneDrive...');await uploadProtocol(modName,p.html,blob);saved=true;}
+      catch(e){console.warn(e);alert('The protocol could NOT be saved to OneDrive: '+e.message+'\nIt is downloaded instead.');}
+    }
+    const url=URL.createObjectURL(blob);
+    if(win&&saved)win.location=url;
+    else{if(win)win.close();const a=document.createElement('a');a.href=url;a.download=p.fileName.replace(/\.html$/,'.pdf');a.click();}
+    setStatus(saved?`✓ Protocol saved to OneDrive: ${protocolName(modName)}`:'Protocol downloaded');
+  }catch(e){if(win)win.close();setStatus('Protocol error: '+e.message);alert('Protocol error: '+e.message);}
 }
 // ---- protocol copy in OneDrive (automatic when a module is ACCEPTED) ----
 // Older versions are not deleted — moved to the subfolder "VECS" with the date added to the name
