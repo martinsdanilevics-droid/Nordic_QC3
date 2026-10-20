@@ -1355,11 +1355,12 @@ async function htmlToPdfBlob(html,onProgress){
   const pageH=Math.floor(W*PH/PW);
   const ifr=document.createElement('iframe');
   ifr.style.cssText=`position:fixed;left:-20000px;top:0;width:${W}px;height:${pageH}px;border:0;`;
+  ifr.setAttribute('scrolling','no'); // no scrollbar: the layout must have the same width as the rendered copy
   document.body.appendChild(ifr);
   try{
     const doc=ifr.contentDocument;doc.open();doc.write(html);doc.close();
     const st=doc.createElement('style');
-    st.textContent='html,body{background:#fff!important}body{max-width:none!important;margin:0!important;padding:0 4px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+    st.textContent='html{overflow:hidden!important;scrollbar-width:none}::-webkit-scrollbar{display:none}html,body{background:#fff!important}body{max-width:none!important;margin:0!important;padding:0 4px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
     doc.head.appendChild(st);
     await Promise.all([...doc.images].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
     if(doc.fonts&&doc.fonts.ready)await doc.fonts.ready;
@@ -1395,7 +1396,11 @@ async function htmlToPdfBlob(html,onProgress){
         const nxForced=(()=>{const c=ifr.contentWindow.getComputedStyle(nx);return c.pageBreakBefore==='always'||c.breakBefore==='page';})();
         if(nxForced){}
         else if(r.height<60&&(nx.tagName==='IMG'||nx.querySelector('img'))){const end=nt+rn.height;if(end-top<pageH*0.9)boxes.push([top,end]);}
-        else if(/^H[1-3]$/.test(el.tagName)||(el.tagName==='P'&&nx.tagName!=='P')){const end=Math.min(nt+rn.height,nt+180);if(end-top<pageH*0.5)boxes.push([top,end]);}}
+        else if(/^(H[1-3]|P)$/.test(el.tagName)){
+          // title lines (headings / short paragraphs in a row) stay with the first ~row of what follows
+          let n=nx,k=0;while(n&&/^(H[1-3]|P)$/.test(n.tagName)&&k<3){n=n.nextElementSibling;k++;}
+          if(n&&!/^(H[1-3]|P)$/.test(n.tagName)){const rb=n.getBoundingClientRect(),bt=rb.top+doc.documentElement.scrollTop;
+            const end=Math.min(bt+rb.height,bt+260);if(end-top<pageH*0.5)boxes.push([top,end]);}}}
     });
     const breaks=[0];let y=0;
     while(y<total-2){
@@ -1632,7 +1637,7 @@ function saveAllProtocols(){
 
 // ---- INIT ----
 // Version shown under the title: version number + when this file was uploaded (to see that an update is live)
-const APP_VERSION='3.23';
+const APP_VERSION='3.24';
 (function showVersion(){
   const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
   if(el)el.textContent=`v${APP_VERSION}`+(isNaN(d)?'':` · upd. ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`);
