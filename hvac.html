@@ -1876,6 +1876,21 @@ async function htmlToPdfBlob(html,onProgress){
     doc.head.appendChild(st);
     await Promise.all([...doc.images].map(im=>im.complete?0:new Promise(r=>{im.onload=im.onerror=r;})));
     if(doc.fonts&&doc.fonts.ready)await doc.fonts.ready;
+    // html2canvas ignores object-fit (photos get stretched) — pre-draw such images at their box size
+    for(const im of [...doc.images]){
+      const fit=ifr.contentWindow.getComputedStyle(im).objectFit;
+      if((fit!=='cover'&&fit!=='contain')||!im.naturalWidth)continue;
+      const bw=im.clientWidth,bh=im.clientHeight;if(!bw||!bh)continue;
+      const k=2,c=document.createElement('canvas');c.width=Math.round(bw*k);c.height=Math.round(bh*k);
+      const g=c.getContext('2d'),nw=im.naturalWidth,nh=im.naturalHeight;
+      const sc=fit==='cover'?Math.max(c.width/nw,c.height/nh):Math.min(c.width/nw,c.height/nh);
+      const dw=nw*sc,dh=nh*sc;
+      if(fit==='contain'){g.fillStyle=ifr.contentWindow.getComputedStyle(im.parentElement).backgroundColor||'#fff';if(g.fillStyle==='rgba(0, 0, 0, 0)')g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);}
+      try{g.drawImage(im,(c.width-dw)/2,(c.height-dh)/2,dw,dh);
+        const url=c.toDataURL('image/jpeg',0.9);
+        await new Promise(r=>{im.onload=im.onerror=r;im.style.objectFit='fill';im.style.width=bw+'px';im.style.height=bh+'px';im.src=url;});}
+      catch(e){} // cross-origin image: leave as it is
+    }
     await new Promise(r=>setTimeout(r,50));
     const body=doc.body,total=Math.ceil(Math.max(body.scrollHeight,doc.documentElement.scrollHeight));
     // page breaks: never inside a row, photo, heading or small block; honour page-break-before
