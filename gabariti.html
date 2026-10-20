@@ -389,7 +389,8 @@ function proj(){return PROJECTS[currentProject];}
 function setStatus(m){document.getElementById('statusbar').textContent=m;}
 function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function fmtD(s){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s||'');return m?`${m[3]}.${m[2]}.${m[1]}`:(s||'');}
-function slug(mod){return mod.replace(/[ -]/g,'');}
+function slug(mod){return mod.replace(/[ -]/g,'');}           // data files (JSON, plan, photos) — keep as is
+function docName(mod){return mod.replace(/\s+/g,'');}        // documents: HLB 1-2 → HLB1-2 (hyphen kept)
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function num(v){if(v===''||v===null||v===undefined)return null;const n=parseFloat(String(v).replace(',','.'));return isNaN(n)?null:n;}
 function sgn(n){return n>0?'+'+n:String(n);}
@@ -933,14 +934,14 @@ async function uploadReports(mod,data,folderId){
     if(data.result==='Approved'){ // accepted → ready-to-print PDF protocol (with photos)
       const html=await buildProtocolHtml(data,{forFile:true,withPhotos:true});
       const pdf=await htmlToPdfBlob(html);
-      await graphUpload(folderId,`${slug(mod)}_QC-2_PROTOCOL.pdf`,pdf,'application/pdf');
+      await graphUpload(folderId,`${docName(mod)}_QC-2_PROTOCOL.pdf`,pdf,'application/pdf');
     }else if(ACT.some(x=>num(data.actual[x.k])!==null)){
       const html=await buildProtocolHtml(data,{forFile:true});
-      await graphUpload(folderId,`${slug(mod)}_QC-2_REPORT.html`,new Blob([html],{type:'text/html'}),'text/html');
+      await graphUpload(folderId,`${docName(mod)}_QC-2_REPORT.html`,new Blob([html],{type:'text/html'}),'text/html');
     }
     if(data.plan&&data.plan.fileId&&(planStats(data).n||(data.plan.marks||[]).length)){
       const bytes=await buildMeasuredPlan(data);
-      await graphUpload(folderId,`${slug(mod)}_plan_measured.pdf`,bytes,'application/pdf');
+      await graphUpload(folderId,`${docName(mod)}_plan_measured.pdf`,bytes,'application/pdf');
     }
     setStatus('Saved ✓ · reports updated');
   }catch(e){console.warn('Report upload',e);setStatus('Saved ✓ · report upload failed: '+e.message);}
@@ -1733,7 +1734,7 @@ async function buildProtocolHtml(d,opts={}){
   <div class="sk">${sketchSVG()}</div>
   <table><tr><th>Dim.</th><th>Measured at</th><th>According to drawings</th><th>Permissible</th><th>Actual</th><th>Deviation</th></tr>
     ${row('P','width',['P_A','P_B'])}${row('G','length',['G_11','G_22'])}${row('H','height',['H_A1','H_A2','H_B1','H_B2'])}</table>
-  ${ps&&ps.n?`<div style="margin-top:6px;font-size:10.5px;color:#555">Additionally measured on the assembly plan: ${ps.n} dimension(s)${ps.bad?`, <b style="color:#c62828">${ps.bad} out of ±${planTol(d)} mm</b>`:`, all within ±${planTol(d)} mm`} — see "${esc(slug(d.module))}_plan_measured.pdf".</div>`:''}
+  ${ps&&ps.n?`<div style="margin-top:6px;font-size:10.5px;color:#555">Additionally measured on the assembly plan: ${ps.n} dimension(s)${ps.bad?`, <b style="color:#c62828">${ps.bad} out of ±${planTol(d)} mm</b>`:`, all within ±${planTol(d)} mm`} — see "${esc(docName(d.module))}_plan_measured.pdf".</div>`:''}
   <div class="sec">2. Checks</div>
   <div class="chk">${box(d.corners90)} The inner corners of the panels are 90 degrees</div>
   <div class="chk">${box(d.photos_taken)} Pictures of assembled module are taken</div>
