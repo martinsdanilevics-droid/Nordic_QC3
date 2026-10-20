@@ -112,7 +112,7 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;m
   <div class="top-bar-left">
     <div>
       <div class="top-bar-title" id="project-title">Nordic Homes — QC-3</div>
-      <div class="top-bar-sub">Module Checklist</div>
+      <div class="top-bar-sub">Module Checklist · <span id="app-version"></span></div>
     </div>
     <select class="module-select" id="project-select" onchange="switchProject(this.value)" style="background:rgba(255,255,255,0.15);font-weight:700">
       <option value="ISL_Holaborg">ISL Holaborg</option>
@@ -1631,6 +1631,12 @@ function saveAllProtocols(){
 }
 
 // ---- INIT ----
+// Version shown under the title: version number + when this file was uploaded (to see that an update is live)
+const APP_VERSION='3.23';
+(function showVersion(){
+  const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
+  if(el)el.textContent=`v${APP_VERSION}`+(isNaN(d)?'':` · upd. ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`);
+})();
 function initDropdown(){
   const sel=document.getElementById('module-select');
   getProjectCfg().modules.forEach(n=>{
