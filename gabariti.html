@@ -929,8 +929,25 @@ async function saveModule(opts={}){
   showTab('overview',true,true);showToast(label);setTimeout(()=>flashRow(mod),150);
   return true;
 }
+// Older versions of a document are not deleted — they are moved to the subfolder "VECS" (date added to the name)
+async function archiveOld(folderId,names){
+  let vecs=null;
+  for(const name of [...new Set(names)]){
+    let it=null;
+    try{it=await graphRequest(`/me/drive/items/${folderId}:/${encodeURIComponent(name)}?$select=id,name,lastModifiedDateTime`);}catch(e){if(e.status!==404)console.warn(e);continue;}
+    if(!it||!it.id)continue;
+    if(!vecs)vecs=await ensureFolder(folderId,'VECS');
+    const d=(it.lastModifiedDateTime||new Date().toISOString()).slice(0,10).replace(/-/g,'');
+    try{await graphRequest(`/me/drive/items/${it.id}`,{method:'PATCH',body:JSON.stringify({parentReference:{id:vecs.id},name:`${d}_${name}`,'@microsoft.graph.conflictBehavior':'rename'})});}
+    catch(e){console.warn('archive',name,e);}
+  }
+}
 async function uploadReports(mod,data,folderId){
   try{
+    // documents named the old way (HLB11_…) and, once approved, the interim HTML report → VECS
+    const old=[`${slug(mod)}_plan_measured.pdf`,`${slug(mod)}_QC-2_REPORT.html`,`${slug(mod)}_QC-2_PROTOCOL.pdf`].filter(n=>!n.startsWith(docName(mod)+'_'));
+    if(data.result==='Approved')old.push(`${docName(mod)}_QC-2_REPORT.html`);
+    await archiveOld(folderId,old);
     if(data.result==='Approved'){ // accepted → ready-to-print PDF protocol (with photos)
       const html=await buildProtocolHtml(data,{forFile:true,withPhotos:true});
       const pdf=await htmlToPdfBlob(html);
@@ -1170,6 +1187,8 @@ async function attachPlan(mod,file,data,entry,opts={}){
     if(other&&other!==mod&&!confirm(`This plan looks like module ${other}, not ${mod}.\n\nAttach it to ${mod} anyway?`))return null;
   }
   const folder=await moduleFolder(mod);
+  // the previous plan and its measured copy go to "VECS" — the folder keeps one current plan
+  await archiveOld(folder.id,[`${slug(mod)}_plan.pdf`,`${docName(mod)}_plan_measured.pdf`,`${slug(mod)}_plan_measured.pdf`]);
   const it=await graphUpload(folder.id,`${slug(mod)}_plan.pdf`,new Blob([bytes],{type:'application/pdf'}),'application/pdf','replace');
   planBytesCache[it.id]=bytes;
   const oldPts=(data.plan&&data.plan.points)||{};
@@ -1665,14 +1684,17 @@ async function htmlToPdfBlob(html,onProgress){
       const nx=el.nextElementSibling;
       if(nx){const rn=nx.getBoundingClientRect(),nt=rn.top+doc.documentElement.scrollTop;
         // a short label right above a photo stays with the whole photo
-        if(r.height<60&&(nx.tagName==='IMG'||nx.querySelector('img'))){const end=nt+rn.height;if(end-top<pageH*0.9)boxes.push([top,end]);}
+        const nxForced=(()=>{const c=ifr.contentWindow.getComputedStyle(nx);return c.pageBreakBefore==='always'||c.breakBefore==='page';})();
+        if(nxForced){}
+        else if(r.height<60&&(nx.tagName==='IMG'||nx.querySelector('img'))){const end=nt+rn.height;if(end-top<pageH*0.9)boxes.push([top,end]);}
         else if(/^H[1-3]$/.test(el.tagName)||(el.tagName==='P'&&nx.tagName!=='P')){const end=Math.min(nt+rn.height,nt+180);if(end-top<pageH*0.5)boxes.push([top,end]);}}
     });
     const breaks=[0];let y=0;
     while(y<total-2){
       let cut=y+pageH;
-      const f=forced.filter(t=>t>y+20&&t<cut);if(f.length)cut=Math.min(...f);
-      if(cut<total){
+      const f=forced.filter(t=>t>y+20&&t<=cut);let isForced=false;if(f.length){cut=Math.min(...f);isForced=true;}
+      if(isForced){} // a forced page break (e.g. photo annex) is kept exactly where it is
+      else if(cut<total){
         let moved=true;
         while(moved){moved=false;for(const [t,b] of boxes){if(t<cut-1&&b>cut+1&&t>y+pageH*0.25){cut=t;moved=true;}}}
       }else cut=total;
