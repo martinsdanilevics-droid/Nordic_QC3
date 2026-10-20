@@ -130,6 +130,7 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;m
     <button class="btn-save" onclick="recoverPhotos()" title="Scan OneDrive and restore missing photo links">&#128247; Recover Photos</button>
     <button class="btn-save" onclick="saveToDrive()">&#8679; Save</button>
     <button class="btn-export" onclick="exportProtocol()">&#8681; Export Protocol</button>
+    <button class="btn-export" onclick="saveAllProtocols()" title="Save the QC-3 protocol of every ACCEPTED module of this project to OneDrive" style="background:#2d5a3d">&#8682; All protocols → OneDrive</button>
   </div>
 </div>
 
@@ -684,6 +685,7 @@ async function flushDirty(){
       for(const m of list){
         if(hasUploadingPhotos(m))continue; // saved again after upload finishes
         await saveModuleToDrive(m);
+        scheduleProtocol(m);
       }
       setStatus('Saved ✓ '+new Date().toLocaleTimeString());
       renderOverview();
@@ -1370,24 +1372,31 @@ async function buildPhotoAppendix(mod,modName){
     (i.photoIds||[]).filter(Boolean).forEach((id,idx)=>{
       const link=web[id]||'';
       const pic=img[id]?`<img src="${img[id]}" style="width:230px;height:172px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block"/>`:`<div style="width:230px;height:172px;border:1px dashed #ccc;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa">photo not available</div>`;
-      h+=`<figure style="margin:0;page-break-inside:avoid">${link?`<a href="${link}" target="_blank">${pic}</a>`:pic}<figcaption style="font-size:10px;color:#999;margin-top:3px;text-align:center">Photo ${idx+1}${link?` — <a href="${link}" target="_blank">Open in OneDrive</a>`:''}</figcaption></figure>`;
+      h+=`<figure style="margin:0;page-break-inside:avoid">${link?`<a href="${link}" target="_blank">${pic}</a>`:pic}<figcaption style="font-size:10px;color:#999;margin-top:3px;text-align:center">Photo ${idx+1}</figcaption></figure>`;
     });
     h+='</div></div>';
   });
   return h+'</div>';
 }
-async function exportProtocol(){
-  if(!currentModule){alert('Please select a module first.');return;}
-  const mod=getModState();
-  const inspector=document.getElementById('inspector-input').value||'—';
-  const pm=document.getElementById('pm-input').value||'—';
-  const dateVal=document.getElementById('date-input').value;
+// Builds the QC-3 protocol (with embedded photo appendix) for one module.
+async function buildProtocol(modName){
+  const mod=modules[modName];
+  if(modName===currentModule){ // take the latest values from the form
+    mod.meta=mod.meta||{};
+    mod.meta.inspector=document.getElementById('inspector-input').value;
+    mod.meta.pm=document.getElementById('pm-input').value;
+    mod.meta.date=document.getElementById('date-input').value;
+    mod.meta.decision=document.getElementById('decision-input').value;
+  }
+  const meta=mod.meta||{};
+  const inspector=meta.inspector||'—';
+  const pm=meta.pm||'—';
+  const dateVal=meta.date;
   const date=dateVal?new Date(dateVal).toLocaleDateString('en-GB'):new Date().toLocaleDateString('en-GB');
   const ok=mod.items.filter(i=>i.status==='accepted').length;
   const rej=mod.items.filter(i=>i.status==='rejected').length;
   const pend=mod.items.filter(i=>i.status==='pending').length;
   const na=mod.items.filter(i=>i.status==='na').length;
-  mod.meta=mod.meta||{};mod.meta.decision=document.getElementById('decision-input').value||mod.meta.decision||'';
   const overall=moduleOverall(mod);
   const openItems=mod.meta.decision==='accepted'?mod.items.filter(i=>i.status==='rejected'||i.status==='pending'):[];
   const oColor=overall==='ACCEPTED'?'#1D9E75':overall==='NOT ACCEPTED'?'#E24B4A':'#EF9F27';
@@ -1408,15 +1417,16 @@ async function exportProtocol(){
       <td style="padding:2px 6px;border:0.5px solid #ccc;font-size:10px;line-height:1.25">${i.notes||''}</td>
     </tr>`;
   });
-  const projLabel=getProjectCfg().label;
+  const projCfg=Object.values(PROJECTS).find(p=>p.modules.includes(modName))||getProjectCfg();
+  const projLabel=projCfg.label;
   // Photo appendix: photos are embedded in the file (OneDrive photos need a sign-in, so links alone would not show them)
-  const photoSec=await buildPhotoAppendix(mod,currentModule);
-  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>QC-3 — ${currentModule}</title>
+  const photoSec=await buildPhotoAppendix(mod,modName);
+  const html=`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>QC-3 — ${modName}</title>
 <style>body{font-family:Arial,sans-serif;max-width:980px;margin:0 auto;padding:28px;color:#333}table{border-collapse:collapse;width:100%}th{background:#f0f0f0;font-size:10px;font-weight:700;padding:4px 6px;line-height:1.25;border:0.5px solid #ccc}td,th{vertical-align:top}tr{page-break-inside:avoid}@media print{body{padding:10px}@page{margin:15mm 12mm}}</style>
 </head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:12px;border-bottom:2px solid #333">
-<div><div style="font-size:11px;color:#888;margin-bottom:4px">Project: ${projLabel} &nbsp;|&nbsp; Address: ${getProjectCfg().address||'Iceland'}</div>
-<h1 style="font-size:18px;font-weight:700;margin-bottom:6px">MODULE CHECKLIST &nbsp; No. QC-3 &nbsp;|&nbsp; Module: ${currentModule}</h1>
+<div><div style="font-size:11px;color:#888;margin-bottom:4px">Project: ${projLabel} &nbsp;|&nbsp; Address: ${projCfg.address||'Iceland'}</div>
+<h1 style="font-size:18px;font-weight:700;margin-bottom:6px">MODULE CHECKLIST &nbsp; No. QC-3 &nbsp;|&nbsp; Module: ${modName}</h1>
 <p style="font-size:12px">Date: <strong>${date}</strong></p></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
 <div style="font-size:20px;font-weight:700;color:${oColor};border:2px solid ${oColor};padding:6px 18px;border-radius:4px">${overall}</div>
@@ -1442,11 +1452,52 @@ ${openItems.length?`<div style="border:1px solid #EF9F27;background:#fffaf0;bord
 </div>
 <div style="margin-top:18px;border-top:1px solid #999;padding-top:6px;width:200px;font-size:11px;color:#777">Signature:</div></div>
 ${photoSec}</body></html>`;
-  const blob=new Blob([html],{type:'text/html'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;
-  a.download=`QC3_${currentModule.replace(/ /g,'_')}_${date.replace(/\//g,'-')}.html`;
-  a.click();URL.revokeObjectURL(url);
+  return {html,overall,fileName:`QC3_${modName.replace(/ /g,'_')}_${date.replace(/\//g,'-')}.html`};
+}
+async function exportProtocol(){
+  if(!currentModule){alert('Please select a module first.');return;}
+  const modName=currentModule;
+  const p=await buildProtocol(modName);
+  const url=URL.createObjectURL(new Blob([p.html],{type:'text/html'}));
+  const a=document.createElement('a');a.href=url;a.download=p.fileName;a.click();URL.revokeObjectURL(url);
+  if(msConnected&&p.overall==='ACCEPTED')uploadProtocol(modName,p.html).catch(e=>console.warn(e));
+}
+// ---- protocol copy in OneDrive (automatic when a module is ACCEPTED) ----
+function protocolName(modName){return `${modName.replace(/[ -]/g,'')}_QC-3_PROTOCOL.html`;}
+async function uploadProtocol(modName,html){
+  if(!moduleFolderIds[modName]&&!getProjectCfg().modules.includes(modName))throw new Error('project changed');
+  const folderId=await ensureModuleFolder(modName);
+  const token=await ensureToken();
+  const r=await fetch(`${GRAPH_BASE}/me/drive/items/${folderId}:/${encodeURIComponent(protocolName(modName))}:/content?@microsoft.graph.conflictBehavior=replace`,
+    {method:'PUT',headers:{Authorization:`Bearer ${token}`,'Content-Type':'text/html'},body:new Blob([html],{type:'text/html'})});
+  if(!r.ok)throw new Error('Protocol upload '+r.status);
+}
+const protoTimers={},protoQueue=[];let protoBusy=false;
+// called after a module is saved: (re)generate its protocol a minute after the last change, one module at a time
+function scheduleProtocol(modName,delay=60000){
+  const mod=modules[modName];if(!mod||!msConnected)return;
+  if(moduleOverall(mod)!=='ACCEPTED')return;
+  clearTimeout(protoTimers[modName]);
+  protoTimers[modName]=setTimeout(()=>{if(!protoQueue.includes(modName))protoQueue.push(modName);runProtoQueue();},delay);
+}
+async function runProtoQueue(){
+  if(protoBusy)return;protoBusy=true;
+  try{
+    while(protoQueue.length){
+      const m=protoQueue.shift();
+      if(moduleOverall(modules[m])!=='ACCEPTED')continue;
+      try{const p=await buildProtocol(m);await uploadProtocol(m,p.html);setStatus(`QC-3 protocol saved to OneDrive ✓ ${m}`);}
+      catch(e){console.warn('protocol',m,e);setStatus(`Protocol for ${m} not saved: ${e.message}`);}
+    }
+  }finally{protoBusy=false;}
+}
+// all ACCEPTED modules of the open project (e.g. after moving data from Google Drive)
+function saveAllProtocols(){
+  if(!msConnected){alert('Connect OneDrive first.');return;}
+  const list=getProjectCfg().modules.filter(m=>modules[m]&&moduleOverall(modules[m])==='ACCEPTED');
+  if(!list.length){alert('No ACCEPTED modules in this project.');return;}
+  if(!confirm(`Create/update the QC-3 protocol in OneDrive for ${list.length} ACCEPTED module(s)?\nThis takes about 1 minute per module — keep the page open.`))return;
+  list.forEach(m=>{if(!protoQueue.includes(m))protoQueue.push(m);});runProtoQueue();
 }
 
 // ---- INIT ----
