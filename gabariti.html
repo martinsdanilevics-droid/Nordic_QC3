@@ -304,6 +304,7 @@ select.top-sel option{background:#1a3a2a;color:#fff;}
     <span class="cnt" id="plan-count"></span>
     <span style="flex:1"></span>
     <label>Tolerance ±<input type="number" id="plan-tol" min="0" step="1" onchange="onPlanTolChange()"/> mm</label>
+    <button onclick="swapAB()" title="Ends A and B are the other way round">A⇄B</button>
     <button id="ink-toggle" onclick="inkToggle()" title="Draw / write notes on the plan">✏️ Draw</button>
     <button onclick="planRotate()" title="Rotate plan">⟳</button>
     <button onclick="planZoom(1/1.4)">−</button>
@@ -1085,7 +1086,7 @@ async function extractDims(bytes){
     const dimsB=black.filter(n=>black.filter(m=>nearB(m.fs,n.fs)).length>=4);
     const seenB=new Set(),outB=[];
     dimsB.forEach(n=>{const key=`${n.v}@${Math.round(n.x)},${Math.round(n.y)}`;if(seenB.has(key))return;seenB.add(key);outB.push({...n,key});});
-    return {dims:outB,meta,texts,pageW:vp.width,pageH:vp.height,byColor:true};
+    return {dims:outB,meta,texts,pageW:vp.width,pageH:vp.height,byColor:true,ends:planEnds(outB,vp)};
   }
   // dimension texts = font sizes used by many numbers. Plan views and sections may use different sizes
   // (e.g. 8.2 and 9.5), so every size group with at least 30% of the biggest group counts; the title block (1–2 numbers) does not.
@@ -1097,7 +1098,7 @@ async function extractDims(bytes){
   const dims=nums.filter(n=>keep.some(g=>near(n.fs,g.fs)));
   const seen=new Set(),out=[];
   dims.forEach(n=>{const key=`${n.v}@${Math.round(n.x)},${Math.round(n.y)}`;if(seen.has(key))return;seen.add(key);out.push({...n,key});});
-  return {dims:out,meta,texts,pageW:vp.width,pageH:vp.height};
+  return {dims:out,meta,texts,pageW:vp.width,pageH:vp.height,ends:planEnds(out,vp)};
 }
 // Best guess for P (overall width) and G (overall length) — shown to the user to confirm/correct.
 // G = the largest dimension. P = the largest "module width"-sized dimension that sits at the outer edge
@@ -1130,7 +1131,20 @@ function suggestPG(allDims){
   const ord=dims.map(d=>d[ox]).sort((a,b)=>a-b),mid=ord[Math.floor(ord.length/2)];
   const s1=gc.filter(d=>d[ox]<mid),s2=gc.filter(d=>d[ox]>=mid);
   const G_11=mx(s1),G_22=mx(s2);
-  return {P,G,P_A,P_B,G_11,G_22};
+  // where ends A/B and sides 1/2 are on the sheet (screen coordinates at scale 1) — used to label the plan
+  const mean=a=>a.reduce((t,d)=>t+d[ox],0)/a.length,bm=(b0+b1)/2;
+  const s1o=s1.length?mean(s1):b0,s2o=s2.length?mean(s2):b1;
+  const geo={ax,ox,aPos:aIsHi?hi-span*0.06:lo+span*0.06,bPos:aIsHi?lo+span*0.06:hi-span*0.06,bm,
+    s1:s1o+(bm-s1o)*0.3,s2:s2o+(bm-s2o)*0.3,midAx:(lo+hi)/2,span};
+  return {P,G,P_A,P_B,G_11,G_22,geo};
+}
+// Positions of the A / B / 1 / 2 labels in PDF coordinates (null when the plan cannot be read)
+function planEnds(dims,vp){
+  try{
+    const g=suggestPG(dims).geo;if(!g)return null;
+    const pt=(along,across)=>{const sx=g.ax==='sx'?along:across,sy=g.ax==='sx'?across:along;return vp.convertToPdfPoint(sx,sy);};
+    return {A:pt(g.aPos,g.bm),B:pt(g.bPos,g.bm),S1:pt(g.midAx,g.s1),S2:pt(g.midAx,g.s2),size:Math.max(14,g.span*0.035)};
+  }catch(e){return null;}
 }
 // Module name written in the drawing (title block "NAME OF MODULE") — returns the project module it matches
 function moduleFromTexts(texts,mods){
@@ -1209,7 +1223,7 @@ async function openPlan(){
     ex.dims.forEach(x=>{if(!d.plan.points[x.key])d.plan.points[x.key]={v:x.v,a:null};});
     const b0=page.getViewport({scale:1});
     let pref=90;try{const v=localStorage.getItem('gab_plan_rot');if(v!==null)pref=+v;}catch(e){}
-    plan={doc,page,dims:ex.dims,zoom:1,landscape:b0.width>b0.height,extra:b0.width>b0.height?pref:0};
+    plan={doc,page,dims:ex.dims,ends:ex.ends,zoom:1,landscape:b0.width>b0.height,extra:b0.width>b0.height?pref:0};
     await renderPlan();
   }catch(e){stage.innerHTML=`<div style="padding:40px;color:#c62828">Could not open the plan: ${esc(e.message)}</div>`;}
 }
@@ -1332,6 +1346,24 @@ function inkCancel(){if(inkCur){inkCur=null;drawInk();}}
 function stagePt(e){const r=document.getElementById('plan-stage').getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
 function toPdf(x,y){const p=plan.vp.convertToPdfPoint(x,y);return [Math.round(p[0]*10)/10,Math.round(p[1]*10)/10];}
 function toScr(x,y){return plan.vp.convertToViewportPoint(x,y);}
+// Big A / B (module ends) and 1 / 2 (long sides) on the plan, same as in the QC-2 sketch
+function endPts(){
+  const e=plan&&plan.ends;if(!e)return null;
+  const sw=ctx.data.plan.swapAB;
+  return [[sw?'B':'A',e.A,1],[sw?'A':'B',e.B,1],['1',e.S1,0.6],['2',e.S2,0.6]];
+}
+function endLabelsSvg(){
+  const pts=endPts();if(!pts)return '';
+  return pts.map(([t,p,k])=>{const v=toScr(p[0],p[1]),fs=Math.max(14,plan.ends.size*plan.scale*k);
+    return `<text x="${v[0]}" y="${v[1]}" font-size="${fs}" font-family="Arial" font-weight="800" fill="#1d4ed8" fill-opacity="0.85" text-anchor="middle" dominant-baseline="central" paint-order="stroke" stroke="#fff" stroke-width="${fs*0.12}">${t}</text>`;}).join('');
+}
+function swapAB(){
+  const d=ctx.data;d.plan.swapAB=!d.plan.swapAB;formDirty=true;
+  // the drawing widths of the ends follow the labels
+  const a=desOf(d,'P_A'),b=desOf(d,'P_B');
+  if(a!==null&&b!==null&&a!==b){d.design.P=b;d.design_k=d.design_k||{};d.design_k.P_A=null;d.design_k.P_B=a;}
+  drawInk();showToast(`Ends swapped — drawing P end A = ${desOf(d,'P_A')??'—'}, end B = ${desOf(d,'P_B')??'—'}`);
+}
 function drawInk(){
   const stage=document.getElementById('plan-stage');if(!plan||!plan.vp||!ctx)return;
   let svg=document.getElementById('plan-ink');
@@ -1339,7 +1371,7 @@ function drawInk(){
   const canv=stage.querySelectorAll('canvas');stage.insertBefore(svg,canv.length?canv[canv.length-1].nextSibling:stage.firstChild);
   svg.setAttribute('width',plan.vp.width);svg.setAttribute('height',plan.vp.height);
   const sc=plan.scale,all=inkMarks().concat(inkCur?[inkCur]:[]);
-  svg.innerHTML=all.map(m=>{
+  svg.innerHTML=endLabelsSvg()+all.map(m=>{
     if(m.t==='ink'){
       const d=m.p.map((q,i)=>{const v=toScr(q[0],q[1]);return (i?'L':'M')+v[0].toFixed(1)+' '+v[1].toFixed(1);}).join('');
       return `<path d="${d}" fill="none" stroke="${m.c}" stroke-width="${Math.max(1.2,m.w*sc)}" stroke-linecap="round" stroke-linejoin="round"/>`;
@@ -1532,6 +1564,14 @@ async function buildMeasuredPlan(data){
     page.drawRectangle({x:ox-Math.cos(r)*1+Math.sin(r)*1.5,y:oy-Math.sin(r)*1-Math.cos(r)*1.5,width:bw+2,height:size*1.05,color:rgb(1,1,1),opacity:0.85,rotate:degrees(dim.rot)});
     page.drawText(txt,{x:ox,y:oy,size,font,color:col,rotate:degrees(dim.rot)});
   });
+  // A / B ends and 1 / 2 sides
+  if(ex.ends){
+    const blue=rgb(0.11,0.31,0.85),rot=((page.getRotation().angle%360)+360)%360,sw=data.plan.swapAB;
+    [[sw?'B':'A',ex.ends.A,1],[sw?'A':'B',ex.ends.B,1],['1',ex.ends.S1,0.6],['2',ex.ends.S2,0.6]].forEach(([t,p,k])=>{
+      const size=ex.ends.size*k,w=font.widthOfTextAtSize(t,size),r=rot*Math.PI/180;
+      page.drawText(t,{x:p[0]-Math.cos(r)*w/2+Math.sin(r)*size*0.35,y:p[1]-Math.sin(r)*w/2-Math.cos(r)*size*0.35,size,font,color:blue,opacity:0.85,rotate:degrees(rot)});
+    });
+  }
   // hand-written notes and text notes
   const hex=h=>rgb(parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255);
   (data.plan.marks||[]).forEach(m=>{
