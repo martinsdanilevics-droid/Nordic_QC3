@@ -1392,14 +1392,17 @@ async function htmlToPdfBlob(html,onProgress){
       const nx=el.nextElementSibling;
       if(nx){const rn=nx.getBoundingClientRect(),nt=rn.top+doc.documentElement.scrollTop;
         // a short label right above a photo stays with the whole photo
-        if(r.height<60&&(nx.tagName==='IMG'||nx.querySelector('img'))){const end=nt+rn.height;if(end-top<pageH*0.9)boxes.push([top,end]);}
+        const nxForced=(()=>{const c=ifr.contentWindow.getComputedStyle(nx);return c.pageBreakBefore==='always'||c.breakBefore==='page';})();
+        if(nxForced){}
+        else if(r.height<60&&(nx.tagName==='IMG'||nx.querySelector('img'))){const end=nt+rn.height;if(end-top<pageH*0.9)boxes.push([top,end]);}
         else if(/^H[1-3]$/.test(el.tagName)||(el.tagName==='P'&&nx.tagName!=='P')){const end=Math.min(nt+rn.height,nt+180);if(end-top<pageH*0.5)boxes.push([top,end]);}}
     });
     const breaks=[0];let y=0;
     while(y<total-2){
       let cut=y+pageH;
-      const f=forced.filter(t=>t>y+20&&t<cut);if(f.length)cut=Math.min(...f);
-      if(cut<total){
+      const f=forced.filter(t=>t>y+20&&t<=cut);let isForced=false;if(f.length){cut=Math.min(...f);isForced=true;}
+      if(isForced){} // a forced page break (e.g. photo annex) is kept exactly where it is
+      else if(cut<total){
         let moved=true;
         while(moved){moved=false;for(const [t,b] of boxes){if(t<cut-1&&b>cut+1&&t>y+pageH*0.25){cut=t;moved=true;}}}
       }else cut=total;
@@ -1557,12 +1560,29 @@ async function exportProtocol(){
   if(msConnected&&p.overall==='ACCEPTED'&&blob.type==='application/pdf')uploadProtocol(modName,p.html,blob).catch(e=>console.warn(e));
 }
 // ---- protocol copy in OneDrive (automatic when a module is ACCEPTED) ----
+// Older versions are not deleted — moved to the subfolder "VECS" with the date added to the name
+async function archiveOld(folderId,names){
+  let vecs=null;
+  for(const name of [...new Set(names)]){
+    let it=null;
+    try{it=await graphRequest(`/me/drive/items/${folderId}:/${encodeURIComponent(name)}?$select=id,name,lastModifiedDateTime`);}catch(e){continue;}
+    if(!it||!it.id)continue;
+    try{
+      if(!vecs)vecs=await ensureFolder(folderId,'VECS');
+      const d=(it.lastModifiedDateTime||new Date().toISOString()).slice(0,10).replace(/-/g,'');
+      await graphRequest(`/me/drive/items/${it.id}`,{method:'PATCH',body:JSON.stringify({parentReference:{id:vecs.id},name:`${d}_${name}`,'@microsoft.graph.conflictBehavior':'rename'})});
+    }catch(e){console.warn('archive',name,e);}
+  }
+}
 function protocolName(modName){return `${modName.replace(/\s+/g,'')}_QC-3_PROTOCOL.pdf`;} // CS 0-1 → CS0-1 (hyphen kept)
 async function uploadProtocol(modName,html,pdfBlob){
   if(!moduleFolderIds[modName]&&!getProjectCfg().modules.includes(modName))throw new Error('project changed');
   const folderId=await ensureModuleFolder(modName);
-  const token=await ensureToken();
   const pdf=pdfBlob||await htmlToPdfBlob(html);
+  // protocols made by earlier versions (HTML, or CS01_… without the hyphen) → subfolder VECS
+  const old=modName.replace(/[ -]/g,'');
+  await archiveOld(folderId,[`${old}_QC-3_PROTOCOL.html`,`${modName.replace(/\s+/g,'')}_QC-3_PROTOCOL.html`,...(old!==modName.replace(/\s+/g,'')?[`${old}_QC-3_PROTOCOL.pdf`]:[])]);
+  const token=await ensureToken();
   const r=await fetch(`${GRAPH_BASE}/me/drive/items/${folderId}:/${encodeURIComponent(protocolName(modName))}:/content?@microsoft.graph.conflictBehavior=replace`,
     {method:'PUT',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/pdf'},body:pdf});
   if(!r.ok)throw new Error('Protocol upload '+r.status);
