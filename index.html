@@ -37,6 +37,10 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;m
 .meta-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .meta-row input{flex:1;min-width:150px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:Arial}
 .meta-row input:focus{outline:none;border-color:#1a1a2e}
+.meta-row select{flex:1;min-width:220px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:13px;font-family:Arial;background:#fff}
+.meta-row select.dec-accepted{border-color:#1D9E75;color:#1D9E75;font-weight:700}
+.meta-row select.dec-not_accepted{border-color:#E24B4A;color:#E24B4A;font-weight:700}
+.overview-card .mod-dec{font-size:11px;font-weight:700;margin-top:2px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px}
 .stat{background:#f8f8f8;border-radius:8px;padding:10px;text-align:center;border:1px solid #eee}
 .stat .val{font-size:22px;font-weight:700}
@@ -114,6 +118,7 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;m
       <option value="ISL_Holaborg">ISL Holaborg</option>
       <option value="ISL_Jorfi">ISL Jorfi</option>
       <option value="ISL_Mariuborg">ISL Mariuborg</option>
+      <option value="GER_CS">GER CS Chimney Street</option>
     </select>
     <select class="module-select" id="module-select" onchange="switchModule(this.value)">
       <option value="">— Select module —</option>
@@ -141,6 +146,11 @@ body{font-family:Arial,sans-serif;font-size:14px;color:#333;background:#f5f5f5;m
         <input type="text" id="inspector-input" placeholder="Quality controller name"/>
         <input type="text" id="pm-input" placeholder="Project manager name"/>
         <input type="date" id="date-input"/>
+        <select id="decision-input" onchange="onDecisionChange()" title="Module acceptance decision (protocol)">
+          <option value="">Result: automatic</option>
+          <option value="accepted">&#10003; ACCEPTED (open items finished on site)</option>
+          <option value="not_accepted">&#10007; NOT ACCEPTED</option>
+        </select>
       </div>
       <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
       <div class="prog-text" id="prog-text">0 of 51 checked (0%)</div>
@@ -288,6 +298,12 @@ const PROJECTS={
     label:'ISL Mariuborg',
     folder:'ISL_Mariuborg_QC',
     modules:['MB 1-1','MB 1-2','MB 2','MB 3-1','MB 3-2']
+  },
+  'GER_CS':{
+    label:'GER CS Chimney Street',
+    folder:'GER_CS_QC',
+    address:'Germany',
+    modules:[0,1,2].flatMap(a=>[1,2,3,4,5,6,7,8].map(b=>`CS ${a}-${b}`))
   }
 };
 
@@ -688,6 +704,7 @@ async function saveToDrive(){
   modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
   modules[currentModule].meta.pm=document.getElementById('pm-input').value;
   modules[currentModule].meta.date=document.getElementById('date-input').value;
+  modules[currentModule].meta.decision=document.getElementById('decision-input').value;
   markDirty(currentModule);
   saveToLocalCache();
   clearTimeout(autoSaveTimer);
@@ -823,7 +840,7 @@ function qc2BadgeHtml(mod){
   const r=c.result,d=c.date?(' · '+c.date.split('-').reverse().join('.')):'';
   if(r==='Approved')return `<span style="${st}background:#e3f4e6;color:#1f6b2a">QC-2 Approved${d}</span>`;
   if(r==='Not approved')return `<span style="${st}background:#fde4e4;color:#c62828">QC-2 Not approved${d}</span>`;
-  return `<span style="${st}background:#fff8e8;color:#9a6b00">QC-2 incomplete${d}</span>`;
+  return `<span style="${st}background:#fff1d6;color:#9a5a00">QC-2 Pending${d}</span>`;
 }
 async function loadQC2Status(mod,force){
   const key=currentProject+'|'+mod;
@@ -1048,6 +1065,7 @@ function renderOverview(){
       <div class="mod-ok">&#10003; ${ok}</div>
       <div class="mod-rej">&#10007; ${rej}</div>
       <div class="mod-pend">&#9679; ${pend} pending</div>
+      ${mod.meta&&mod.meta.decision==='accepted'?'<div class="mod-dec" style="color:#1D9E75">&#10003; ACCEPTED</div>':mod.meta&&mod.meta.decision==='not_accepted'?'<div class="mod-dec" style="color:#E24B4A">&#10007; NOT ACCEPTED</div>':''}
       <div class="mod-bar"><div class="mod-bar-fill" style="width:${pct}%"></div></div>
     </div>`;
   });
@@ -1079,12 +1097,25 @@ function initProjectModules(projKey){
   });
 }
 
+// Module acceptance decision: '' = automatic, 'accepted' = accepted although some items are open (finished on site), 'not_accepted'
+function setDecisionUI(v){const el=document.getElementById('decision-input');el.value=v;el.className=v?'dec-'+v:'';}
+function onDecisionChange(){
+  const v=document.getElementById('decision-input').value;setDecisionUI(v);
+  if(currentModule){modules[currentModule].meta.decision=v;autoSave(currentModule);renderOverview();}
+}
+function moduleOverall(mod){
+  const rej=mod.items.filter(i=>i.status==='rejected').length,pend=mod.items.filter(i=>i.status==='pending').length,na=mod.items.filter(i=>i.status==='na').length;
+  const d=(mod.meta&&mod.meta.decision)||'';
+  if(d==='accepted')return 'ACCEPTED';if(d==='not_accepted')return 'NOT ACCEPTED';
+  return rej===0&&(pend-na)<=0?'ACCEPTED':rej>0?'NOT ACCEPTED':'IN PROGRESS';
+}
 function switchModule(name){
   if(!name)return;
   if(currentModule){
     modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
     modules[currentModule].meta.pm=document.getElementById('pm-input').value;
     modules[currentModule].meta.date=document.getElementById('date-input').value;
+    modules[currentModule].meta.decision=document.getElementById('decision-input').value;
   }
   currentModule=name;
   document.getElementById('module-select').value=name;
@@ -1093,6 +1124,7 @@ function switchModule(name){
   document.getElementById('inspector-input').value=meta.inspector||'Mārtiņš Danilevičs';
   document.getElementById('pm-input').value=meta.pm||'Eva Litauniece';
   document.getElementById('date-input').value=meta.date||new Date().toISOString().split('T')[0];
+  setDecisionUI(meta.decision||'');
   filter='all';
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.textContent.trim()==='All'));
   render();renderOverview();
@@ -1298,6 +1330,7 @@ function autoSave(modName){
     modules[currentModule].meta.inspector=document.getElementById('inspector-input').value;
     modules[currentModule].meta.pm=document.getElementById('pm-input').value;
     modules[currentModule].meta.date=document.getElementById('date-input').value;
+    modules[currentModule].meta.decision=document.getElementById('decision-input').value;
   }
   markDirty(typeof modName==='string'?modName:currentModule);
   saveToLocalCache();
@@ -1317,7 +1350,9 @@ function exportProtocol(){
   const rej=mod.items.filter(i=>i.status==='rejected').length;
   const pend=mod.items.filter(i=>i.status==='pending').length;
   const na=mod.items.filter(i=>i.status==='na').length;
-  const overall=rej===0&&(pend-na)<=0?'ACCEPTED':rej>0?'NOT ACCEPTED':'IN PROGRESS';
+  mod.meta=mod.meta||{};mod.meta.decision=document.getElementById('decision-input').value||mod.meta.decision||'';
+  const overall=moduleOverall(mod);
+  const openItems=mod.meta.decision==='accepted'?mod.items.filter(i=>i.status==='rejected'||i.status==='pending'):[];
   const oColor=overall==='ACCEPTED'?'#1D9E75':overall==='NOT ACCEPTED'?'#E24B4A':'#EF9F27';
   let rows='';
   mod.items.forEach(i=>{
@@ -1341,7 +1376,7 @@ function exportProtocol(){
 <style>body{font-family:Arial,sans-serif;max-width:980px;margin:0 auto;padding:28px;color:#333}table{border-collapse:collapse;width:100%}th{background:#f0f0f0;font-size:10px;font-weight:700;padding:4px 6px;line-height:1.25;border:0.5px solid #ccc}td,th{vertical-align:top}tr{page-break-inside:avoid}@media print{body{padding:10px}@page{margin:15mm 12mm}}</style>
 </head><body>
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding-bottom:12px;border-bottom:2px solid #333">
-<div><div style="font-size:11px;color:#888;margin-bottom:4px">Project: ${projLabel} &nbsp;|&nbsp; Address: Iceland</div>
+<div><div style="font-size:11px;color:#888;margin-bottom:4px">Project: ${projLabel} &nbsp;|&nbsp; Address: ${getProjectCfg().address||'Iceland'}</div>
 <h1 style="font-size:18px;font-weight:700;margin-bottom:6px">MODULE CHECKLIST &nbsp; No. QC-3 &nbsp;|&nbsp; Module: ${currentModule}</h1>
 <p style="font-size:12px">Date: <strong>${date}</strong></p></div>
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px">
@@ -1352,6 +1387,7 @@ function exportProtocol(){
 <th style="width:72px">Quality rejected, date</th><th style="width:72px">Quality accepted, date</th>
 <th style="width:80px">Status</th><th style="width:90px">Notes</th>
 </tr></thead><tbody>${rows}</tbody></table>
+${openItems.length?`<div style="border:1px solid #EF9F27;background:#fffaf0;border-radius:4px;padding:11px 15px;margin-bottom:18px"><p style="font-weight:700;font-size:12.5px;margin-bottom:6px">Module accepted. Open items to be completed on site:</p>${openItems.map(i=>`<p style="font-size:11.5px;margin-bottom:3px">#${i.id} — ${escH(i.desc)}${i.notes?` <i style="color:#555">(${escH(i.notes)})</i>`:''} <b style="color:${i.status==='rejected'?'#E24B4A':'#EF9F27'}">[${i.status==='rejected'?'Rejected':'Pending'}]</b></p>`).join('')}</div>`:''}
 <div style="background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:13px 17px;margin-bottom:26px">
 <p style="font-weight:700;font-size:13px;margin-bottom:8px">Meets quality requirements!</p>
 <p style="font-size:12px;margin-bottom:2px">Quality controller: <strong>${inspector}</strong></p>

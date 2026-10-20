@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Nordic Homes — move CS QC-3 from Google Drive to OneDrive</title>
+<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a1a;font-size:14px}
+.top{background:#1a1a2e;color:#fff;padding:14px 20px}
+.top h1{font-size:17px}.top p{font-size:12px;opacity:.75;margin-top:3px}
+.wrap{max-width:1100px;margin:18px auto;padding:0 16px}
+.card{background:#fff;border-radius:12px;padding:16px 18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.card h2{font-size:14px;margin-bottom:10px;color:#1a3a2a}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#fff;font-size:13px;font-weight:600;cursor:pointer}
+button.primary{background:#2d5a3d;color:#fff;border-color:#2d5a3d}
+button.ok{background:#e3f4e6;color:#1f6b2a;border-color:#b8e0c0}
+button:disabled{opacity:.5;cursor:not-allowed}
+.note{font-size:12px;color:#666;line-height:1.5}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border:1px solid #e3e3e3;padding:6px 8px;text-align:left}
+th{background:#f5f7f6;font-size:11.5px}
+td.n{text-align:right;white-space:nowrap}
+.st{font-weight:700}.st.done{color:#1f6b2a}.st.err{color:#c62828}.st.run{color:#b26a00}.st.skip{color:#777}
+.bar{height:6px;background:#eee;border-radius:3px;overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:#2e7d32}
+#log{font-family:Consolas,monospace;font-size:11.5px;white-space:pre-wrap;max-height:240px;overflow:auto;background:#fafafa;border:1px solid #eee;border-radius:6px;padding:8px}
+.warn{background:#fff8e6;border:1px solid #f0d28a;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5}
+label.chk{display:flex;gap:6px;align-items:center;font-size:13px}
+</style>
+</head>
+<body>
+<div class="top"><h1>Move GER CS Chimney Street QC-3 checklists + photos: Google Drive → OneDrive</h1>
+<p>One-time tool. Google Drive is only read (nothing is changed or deleted there). Data is written to OneDrive: Nordic_QC3 / GER_CS_QC / [module].</p></div>
+<div class="wrap">
+
+<div class="card"><h2>1. Connect</h2>
+  <div class="row">
+    <button id="g-btn" onclick="connectGoogle()" disabled>Loading Google…</button>
+    <button id="m-btn" onclick="connectMs()">Connect OneDrive</button>
+    <span id="who" class="note"></span>
+  </div>
+  <p class="note" style="margin-top:8px">Use the same Google account as in the ISL/GER app and the same Microsoft account as in the QC3 app.</p>
+</div>
+
+<div class="card"><h2>2. Check what will be copied</h2>
+  <div class="row"><button id="scan-btn" class="primary" onclick="scan()" disabled>🔍 Scan Google Drive</button>
+    <label class="chk"><input type="checkbox" id="overwrite"/> Overwrite a QC-3 checklist that already exists in OneDrive</label></div>
+  <div id="scan-info" class="note" style="margin-top:8px"></div>
+</div>
+
+<div class="card"><h2>3. Copy</h2>
+  <div class="row">
+    <button id="run-btn" class="primary" onclick="run()" disabled>▶ Start copying</button>
+    <button id="pause-btn" onclick="pause()" disabled>⏸ Pause</button>
+    <span id="total" class="note"></span>
+  </div>
+  <div class="warn" style="margin-top:10px">Keep this page open until it says <b>All done</b> — about 2–4 hours for ~8000 photos. If it stops (sleep, internet, Google sign-in expired), just open the page again and press <b>Start copying</b>: photos already copied are skipped.</div>
+  <div style="margin-top:12px;overflow:auto"><table id="tbl"><thead><tr><th>Module</th><th>Google Drive checklist</th><th>Items</th><th>Photos</th><th>Copied</th><th></th><th>Status</th></tr></thead><tbody></tbody></table></div>
+</div>
+
+<div class="card"><h2>Log</h2><div id="log"></div></div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const G_CLIENT_ID='433432963029-da3nhrredpd9t0dk6b8bb1juh7n156av.apps.googleusercontent.com';
+const G_SCOPE='https://www.googleapis.com/auth/drive.readonly';
+const MS_CLIENT_ID='18090634-b157-4e0c-837d-590122ea9eca';
+const MS_TENANT_ID='aac98fec-0701-4329-ad5d-8b1d279eeb6c';
+const MS_SCOPES='Files.ReadWrite User.Read offline_access';
+const APP_DIR=location.origin+location.pathname.replace(/[^/]*$/,'');
+const MS_REDIRECT_URI=APP_DIR+'hvac.html';   // registered in Azure; hvac.html sends the sign-in back here (state=migrate)
+const LS_RT='hvac_ms_refresh_token',LS_EXP='hvac_ms_token_expiry';
+const GRAPH='https://graph.microsoft.com/v1.0';
+const OD_ROOT='Nordic_QC3',OD_PROJECT='GER_CS_QC';
+const MODULES=[0,1,2].flatMap(a=>[1,2,3,4,5,6,7,8].map(b=>`CS ${a}-${b}`));
+const PARALLEL=4;
+const gJsonName=m=>`qc_${m.replace('-','')}.json`;          // name used by the ISL/GER app
+const odJsonName=m=>`qc_${m.replace(/[ -]/g,'')}.json`;      // name used by the QC3 app
+
+// ===== UI helpers =====
+const $=id=>document.getElementById(id);
+function log(t){const el=$('log');el.textContent+=`[${new Date().toLocaleTimeString()}] ${t}\n`;el.scrollTop=el.scrollHeight;}
+const st={}; // per module: {gFile,data,photos:[{gid}],copied,status,msg,odJson}
+function row(m){
+  const s=st[m]||{};let tr=document.querySelector(`tr[data-m="${m}"]`);
+  if(!tr){tr=document.createElement('tr');tr.dataset.m=m;$('tbl').tBodies[0].appendChild(tr);}
+  const n=(s.photos||[]).length,c=s.copied||0,pct=n?Math.round(c/n*100):0;
+  tr.innerHTML=`<td><b>${m}</b></td><td class="note">${s.gFile?s.gFile.name+(s.gAlt?` <span style="color:#b26a00">(+${s.gAlt} older copy ignored)</span>`:''):'—'}</td>
+    <td class="n">${s.data?s.data.items.length:''}</td><td class="n">${s.data?n:''}</td><td class="n">${s.data?c:''}</td>
+    <td><div class="bar"><i style="width:${pct}%"></i></div></td><td class="st ${s.status||''}">${s.msg||''}</td>`;
+}
+function totals(){
+  let n=0,c=0,d=0;MODULES.forEach(m=>{const s=st[m];if(!s||!s.photos)return;n+=s.photos.length;c+=s.copied||0;if(s.status==='done')d++;});
+  $('total').textContent=n?`${c} of ${n} photos copied · ${d} of ${MODULES.length} modules done`:'';
+}
+
+// ===== GOOGLE =====
+let gToken=null,gClient=null,gWaiter=null;
+function gisLoaded(){
+  gClient=google.accounts.oauth2.initTokenClient({client_id:G_CLIENT_ID,scope:G_SCOPE,callback:r=>{
+    if(r.error){log('Google sign-in error: '+r.error);return;}
+    gToken=r.access_token;$('g-btn').textContent='✓ Google Drive connected';$('g-btn').className='ok';
+    log('Google Drive connected.');updateButtons();
+    if(gWaiter){const w=gWaiter;gWaiter=null;w();}
+  }});
+  $('g-btn').disabled=false;$('g-btn').textContent='Connect Google Drive';
+}
+function connectGoogle(){gClient.requestAccessToken({prompt:gToken?'':'consent'});}
+async function gFetch(url,asBlob){
+  for(;;){
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+gToken}});
+    if(r.status===401){ // token expired (1 h) — ask the user to reconnect, then continue
+      gToken=null;$('g-btn').textContent='⚠ Reconnect Google Drive to continue';$('g-btn').className='';
+      log('Google sign-in expired — press "Reconnect Google Drive" to continue.');
+      await new Promise(res=>{gWaiter=res;});continue;
+    }
+    if(r.status===429||r.status>=500){await sleep(3000);continue;}
+    if(!r.ok){const e=new Error('Google '+r.status+': '+(await r.text()).slice(0,200));e.status=r.status;throw e;}
+    return asBlob?r.blob():r.json();
+  }
+}
+const G='https://www.googleapis.com/drive/v3/files';
+
+// ===== MICROSOFT (same sign-in as HVAC / gabariti) =====
+let msToken=null,msExp=0,msRefreshing=null;
+function b64url(a){return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
+async function connectMs(){
+  const arr=new Uint8Array(32);crypto.getRandomValues(arr);const ver=b64url(arr);
+  const ch=b64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ver))));
+  sessionStorage.setItem('mig_pkce',ver);
+  location.href=`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?`+new URLSearchParams({client_id:MS_CLIENT_ID,response_type:'code',redirect_uri:MS_REDIRECT_URI,scope:MS_SCOPES,code_challenge:ch,code_challenge_method:'S256',response_mode:'query',state:'migrate'});
+}
+async function tokenCall(body){
+  const r=await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`,{method:'POST',body:new URLSearchParams(body)});
+  const d=await r.json();if(d.error)throw new Error(d.error_description||d.error);
+  msToken=d.access_token;msExp=Date.now()+(d.expires_in-300)*1000;if(d.refresh_token)localStorage.setItem(LS_RT,d.refresh_token);localStorage.setItem(LS_EXP,String(msExp));
+}
+async function msTok(){
+  if(msToken&&Date.now()<msExp)return msToken;
+  if(!msRefreshing)msRefreshing=tokenCall({client_id:MS_CLIENT_ID,grant_type:'refresh_token',refresh_token:localStorage.getItem(LS_RT)||'',scope:MS_SCOPES}).finally(()=>{msRefreshing=null;});
+  await msRefreshing;return msToken;
+}
+async function graph(path,opt={}){
+  for(let tries=0;;tries++){
+    const r=await fetch(path.startsWith('http')?path:GRAPH+path,{...opt,headers:{Authorization:'Bearer '+await msTok(),...(opt.json?{'Content-Type':'application/json'}:{}),...(opt.headers||{})},body:opt.json?JSON.stringify(opt.json):opt.body});
+    if((r.status===429||r.status>=500)&&tries<6){await sleep((+r.headers.get('Retry-After')||3)*1000);continue;}
+    if(r.status===401&&tries<1){msToken=null;continue;}
+    if(!r.ok){const e=new Error('OneDrive '+r.status+': '+(await r.text()).slice(0,200));e.status=r.status;throw e;}
+    return r.status===204?{}:r.json();
+  }
+}
+const folderCache={};
+async function odFolder(parentId,name){
+  const k=parentId+'/'+name;if(folderCache[k])return folderCache[k];
+  const enc=encodeURIComponent(name.replace(/'/g,"''"));
+  let f=((await graph(`/me/drive/items/${parentId}/children?$filter=name eq '${enc}'&$select=id,name`)).value||[]).find(x=>x.name===name);
+  if(!f)f=await graph(`/me/drive/items/${parentId}/children`,{method:'POST',json:{name,folder:{},'@microsoft.graph.conflictBehavior':'fail'}})
+    .catch(async e=>{if(e.status===409)return ((await graph(`/me/drive/items/${parentId}/children?$filter=name eq '${enc}'`)).value||[]).find(x=>x.name===name);throw e;});
+  return folderCache[k]=f;
+}
+async function odModuleFolder(m){const r=await odFolder('root',OD_ROOT),p=await odFolder(r.id,OD_PROJECT);return odFolder(p.id,m);}
+async function odChildren(folderId){
+  const out={};let url=`/me/drive/items/${folderId}/children?$select=id,name,size&$top=999`;
+  while(url){const d=await graph(url);(d.value||[]).forEach(x=>out[x.name]=x);url=d['@odata.nextLink']||null;}
+  return out;
+}
+async function odUpload(folderId,name,blob,conflict='replace'){
+  const path=`/me/drive/items/${folderId}:/${encodeURIComponent(name)}:`;
+  if(blob.size<=4*1024*1024)
+    return graph(`${path}/content?@microsoft.graph.conflictBehavior=${conflict}`,{method:'PUT',body:blob,headers:{'Content-Type':blob.type||'application/octet-stream'}});
+  const ses=await graph(`${path}/createUploadSession`,{method:'POST',json:{item:{'@microsoft.graph.conflictBehavior':conflict}}});
+  const CH=5*1024*1024;let res=null;
+  for(let o=0;o<blob.size;o+=CH){
+    const part=blob.slice(o,Math.min(o+CH,blob.size));
+    const r=await fetch(ses.uploadUrl,{method:'PUT',body:part,headers:{'Content-Range':`bytes ${o}-${o+part.size-1}/${blob.size}`}});
+    if(!r.ok&&r.status!==202)throw new Error('Upload '+r.status);
+    if(r.status===200||r.status===201)res=await r.json();
+  }
+  return res;
+}
+
+// ===== SCAN =====
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function updateButtons(){
+  const both=!!gToken&&!!msToken;
+  $('scan-btn').disabled=!both||running;
+  $('run-btn').disabled=!both||running||!MODULES.some(m=>st[m]&&st[m].data);
+}
+async function scan(){
+  $('scan-btn').disabled=true;$('scan-info').textContent='Scanning…';
+  let found=0,photos=0;
+  for(const m of MODULES){
+    const s=st[m]=st[m]||{};s.status='';s.msg='scanning…';row(m);
+    try{
+      const q=`name='${gJsonName(m).replace(/'/g,"\\'")}' and trashed=false`;
+      const files=(await gFetch(`${G}?q=${encodeURIComponent(q)}&fields=files(id,name,parents,modifiedTime,size)&pageSize=50&orderBy=modifiedTime desc`)).files||[];
+      if(!files.length){s.msg='no checklist in Google Drive';s.status='skip';row(m);continue;}
+      // several copies: use the one with most filled items + photos, then the newest (same rule as the ISL/GER app)
+      let best=null;
+      for(const f of files){
+        const d=await gFetch(`${G}/${f.id}?alt=media`);
+        const sc=(d.items||[]).filter(i=>i.status&&i.status!=='pending').length+(d.items||[]).reduce((t,i)=>t+(i.photoIds||[]).filter(Boolean).length,0);
+        if(!best||sc>best.sc)best={f,d,sc};
+      }
+      s.gFile=best.f;s.gAlt=files.length-1;s.data=best.d;
+      s.photos=[];const seen=new Set();
+      (s.data.items||[]).forEach(it=>(it.photoIds||[]).filter(Boolean).forEach(g=>{if(!seen.has(g)){seen.add(g);s.photos.push({gid:g,item:it.id});}}));
+      const odF=await odModuleFolder(m);s.odFolder=odF.id;
+      const kids=await odChildren(odF.id);s.odExisting=kids;
+      s.odJson=kids[odJsonName(m)]||null;
+      const map=loadMap(m);s.copied=s.photos.filter(p=>map[p.gid]&&Object.values(kids).some(k=>k.id===map[p.gid])).length;
+      s.msg=isDone(m)?'already copied ✓':s.odJson&&!ours(m)?'QC-3 checklist already exists in OneDrive':s.odJson?'partly copied — will continue':'ready';
+      s.status=isDone(m)?'done':s.odJson&&!ours(m)&&!$('overwrite').checked?'skip':'';
+      found++;photos+=s.photos.length;
+    }catch(e){s.msg='error: '+e.message;s.status='err';log(m+': '+e.message);}
+    row(m);totals();
+  }
+  $('scan-info').innerHTML=`Found <b>${found}</b> of ${MODULES.length} module checklists with <b>${photos}</b> photos. `+
+    `Modules marked "already exists" are skipped unless "Overwrite" is ticked.`;
+  log(`Scan: ${found} checklists, ${photos} photos.`);
+  updateButtons();
+}
+
+// ===== COPY =====
+function loadMap(m){try{return JSON.parse(localStorage.getItem('mig_map_'+m)||'{}');}catch(e){return {};}}
+function saveMap(m,map){try{localStorage.setItem('mig_map_'+m,JSON.stringify(map));}catch(e){}}
+function isDone(m){return localStorage.getItem('mig_done_'+m)==='1';}
+function ours(m){return localStorage.getItem('mig_written_'+m)==='1';} // the OneDrive checklist was written by this tool (resume allowed)
+let running=false,paused=false;
+function pause(){paused=true;$('pause-btn').disabled=true;log('Pausing after the current photos…');}
+async function run(){
+  running=true;paused=false;updateButtons();$('pause-btn').disabled=false;
+  const ow=$('overwrite').checked;
+  for(const m of MODULES){
+    if(paused)break;
+    const s=st[m];if(!s||!s.data)continue;
+    if(isDone(m)&&!ow){s.status='done';s.msg='already copied ✓';row(m);continue;}
+    if(s.odJson&&!ow&&!ours(m)){s.status='skip';s.msg='skipped — QC-3 checklist already in OneDrive';row(m);continue;}
+    try{await copyModule(m,s);}catch(e){s.status='err';s.msg='error: '+e.message;row(m);log(m+': '+e.message);}
+    totals();
+  }
+  running=false;$('pause-btn').disabled=true;updateButtons();
+  const all=MODULES.filter(m=>st[m]&&st[m].data).every(m=>st[m].status==='done'||st[m].status==='skip');
+  log(paused?'Paused. Press "Start copying" to continue.':all?'All done ✓':'Finished with errors — press "Start copying" again to retry the failed ones.');
+  if(all&&!paused)alert('All done ✓\n\nOpen the QC3 app → project "GER CS Chimney Street" and check a few modules.');
+}
+async function copyModule(m,s){
+  s.status='run';s.msg='copying photos…';row(m);
+  const map=loadMap(m),kids=s.odExisting||await odChildren(s.odFolder);
+  const byId={};Object.values(kids).forEach(k=>byId[k.id]=k);
+  const usedNames=new Set(Object.keys(kids));
+  let copied=0,failed=[],gone=[];
+  const queue=s.photos.slice();
+  const worker=async()=>{
+    while(queue.length&&!paused){
+      const p=queue.shift();
+      if(map[p.gid]&&byId[map[p.gid]]){copied++;s.copied=copied;continue;}      // already copied earlier
+      try{
+        const meta=await gFetch(`${G}/${p.gid}?fields=id,name,mimeType,size,trashed`);
+        let name=meta.name||`${m}_item${p.item}_${p.gid}.jpg`;
+        if(kids[name]&&!Object.values(map).includes(kids[name].id)&&+kids[name].size===+meta.size){map[p.gid]=kids[name].id;} // same file uploaded before
+        else{
+          if(usedNames.has(name))name=name.replace(/(\.\w+)?$/,`_${p.gid.slice(0,6)}$1`);
+          usedNames.add(name);
+          const blob=await gFetch(`${G}/${p.gid}?alt=media`,true);
+          const it=await odUpload(s.odFolder,name,blob,'replace');
+          map[p.gid]=it.id;byId[it.id]=it;kids[name]=it;
+        }
+        saveMap(m,map);copied++;s.copied=copied;
+      }catch(e){
+        if(e.status===404){gone.push(p.gid);log(`${m}: photo of item #${p.item} no longer exists in Google Drive — left out`);}
+        else{failed.push(p.gid);log(`${m}: photo ${p.gid} (item #${p.item}) not copied — ${e.message}`);}
+      }
+      if(copied%5===0){row(m);totals();}
+    }
+  };
+  s.copied=0;
+  await Promise.all(Array.from({length:PARALLEL},worker));
+  row(m);totals();
+  if(paused){s.status='run';s.msg='paused';row(m);return;}
+  // checklist JSON in the QC3 format: same items, photo IDs replaced with OneDrive IDs
+  const data=JSON.parse(JSON.stringify(s.data));
+  let missing=0;
+  (data.items||[]).forEach(it=>{it.photoIds=(it.photoIds||[]).filter(Boolean).map(g=>{if(map[g])return map[g];if(!gone.includes(g))missing++;return null;}).filter(Boolean);});
+  data.meta=data.meta||{};data.meta.migrated_from='Google Drive';data.meta.migrated_at=new Date().toISOString();
+  await odUpload(s.odFolder,odJsonName(m),new Blob([JSON.stringify(data)],{type:'application/json'}),'replace');
+  localStorage.setItem('mig_written_'+m,'1');
+  if(missing){s.status='err';s.msg=`checklist saved — ${missing} photo(s) not copied yet, press Start again`;}
+  else{s.status='done';s.msg='done ✓'+(gone.length?` (${gone.length} photo(s) were already deleted in Google Drive)`:'');localStorage.setItem('mig_done_'+m,'1');}
+  row(m);log(`${m}: ${copied} photos copied, checklist written${missing?`, ${missing} photos still missing`:''}${gone.length?`, ${gone.length} not in Google Drive any more`:''}.`);
+}
+
+// ===== INIT =====
+MODULES.forEach(row);
+(async()=>{
+  const u=new URL(location.href),code=u.searchParams.get('code');
+  if(code){
+    history.replaceState({},'',location.pathname);
+    try{await tokenCall({client_id:MS_CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:MS_REDIRECT_URI,code_verifier:sessionStorage.getItem('mig_pkce')||'',scope:MS_SCOPES});}
+    catch(e){log('OneDrive sign-in error: '+e.message);}
+  }else if(localStorage.getItem(LS_RT)){try{await msTok();}catch(e){log('OneDrive: please connect again ('+e.message+')');}}
+  if(msToken){
+    $('m-btn').textContent='✓ OneDrive connected';$('m-btn').className='ok';
+    try{const me=await graph('/me?$select=mail,userPrincipalName');$('who').textContent='OneDrive: '+(me.mail||me.userPrincipalName);}catch(e){}
+    log('OneDrive connected.');
+  }
+  updateButtons();
+})();
+</script>
+</body>
+</html>
