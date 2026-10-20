@@ -1542,7 +1542,7 @@ async function exportProtocol(){
   if(msConnected&&p.overall==='ACCEPTED'&&blob.type==='application/pdf')uploadProtocol(modName,p.html,blob).catch(e=>console.warn(e));
 }
 // ---- protocol copy in OneDrive (automatic when a module is ACCEPTED) ----
-function protocolName(modName){return `${modName.replace(/[ -]/g,'')}_QC-3_PROTOCOL.pdf`;}
+function protocolName(modName){return `${modName.replace(/\s+/g,'')}_QC-3_PROTOCOL.pdf`;} // CS 0-1 → CS0-1 (hyphen kept)
 async function uploadProtocol(modName,html,pdfBlob){
   if(!moduleFolderIds[modName]&&!getProjectCfg().modules.includes(modName))throw new Error('project changed');
   const folderId=await ensureModuleFolder(modName);
