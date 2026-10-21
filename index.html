@@ -1463,13 +1463,16 @@ async function buildPhotoAppendix(mod,modName){
   setStatus(`Preparing protocol photos 0/${ids.length}...`);
   await Promise.all(Array.from({length:6},worker));
   setStatus(`Protocol ready (${Object.keys(img).length} photos)`);
-  let h=`<div style="margin-top:48px;page-break-before:always"><h2 style="font-size:15px;font-weight:700;margin-bottom:18px;padding-bottom:8px;border-bottom:2px solid #333">Photo documentation — Appendix</h2>`;
+  // photos are numbered straight through the whole appendix (1 … total)
+  let h=`<div style="margin-top:48px;page-break-before:always"><h2 style="font-size:15px;font-weight:700;margin-bottom:18px;padding-bottom:8px;border-bottom:2px solid #333">Photo documentation — Appendix <span style="font-weight:400;color:#666;font-size:13px">(${ids.length} photos)</span></h2>`;
+  let num=0;
   withPhotos.forEach(i=>{
-    h+=`<div style="margin-bottom:28px"><p style="font-size:12px;font-weight:700;margin-bottom:4px">No. ${i.id} — ${escH(i.section)}</p><p style="font-size:11px;color:#555;margin-bottom:10px">${escH(i.desc)}</p><div style="display:flex;flex-wrap:wrap;gap:14px">`;
-    (i.photoIds||[]).filter(Boolean).forEach((id,idx)=>{
+    const cnt=(i.photoIds||[]).filter(Boolean).length,from=num+1,to=num+cnt;
+    h+=`<div style="margin-bottom:28px"><p style="font-size:12px;font-weight:700;margin-bottom:4px">No. ${i.id} — ${escH(i.section)} <span style="font-weight:400;color:#888">· Photo${cnt>1?`s ${from}–${to}`:` ${from}`}</span></p><p style="font-size:11px;color:#555;margin-bottom:10px">${escH(i.desc)}</p><div style="display:flex;flex-wrap:wrap;gap:14px">`;
+    (i.photoIds||[]).filter(Boolean).forEach(id=>{const no=++num;
       const link=web[id]||'';
       const pic=img[id]?`<img src="${img[id]}" style="width:230px;height:172px;object-fit:cover;border-radius:5px;border:1px solid #ddd;display:block"/>`:`<div style="width:230px;height:172px;border:1px dashed #ccc;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa">photo not available</div>`;
-      h+=`<figure style="margin:0;page-break-inside:avoid">${link?`<a href="${link}" target="_blank">${pic}</a>`:pic}<figcaption style="font-size:10px;color:#999;margin-top:3px;text-align:center">Photo ${idx+1}</figcaption></figure>`;
+      h+=`<figure style="margin:0;page-break-inside:avoid">${link?`<a href="${link}" target="_blank">${pic}</a>`:pic}<figcaption style="font-size:10px;color:#999;margin-top:3px;text-align:center">Photo ${no}</figcaption></figure>`;
     });
     h+='</div></div>';
   });
@@ -1637,7 +1640,7 @@ function saveAllProtocols(){
 
 // ---- INIT ----
 // Version shown under the title: version number + when this file was uploaded (to see that an update is live)
-const APP_VERSION='3.24';
+const APP_VERSION='3.25';
 (function showVersion(){
   const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
   if(el)el.textContent=`v${APP_VERSION}`+(isNaN(d)?'':` · upd. ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`);
