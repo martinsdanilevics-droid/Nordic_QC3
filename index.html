@@ -1353,7 +1353,7 @@ function pdfLoadScript(src){
 async function htmlToPdfBlob(html,onProgress,opts={}){
   for(const s of PDF_LIBS)await pdfLoadScript(s);
   const L=!!opts.landscape,PGW=L?297:210,PGH=L?210:297;          // A4 portrait / landscape, mm
-  const W=L?1300:900,MARGIN=10,PW=PGW-2*MARGIN,PH=PGH-2*MARGIN;   // layout width in px
+  const W=opts.width||(L?1300:900),MARGIN=10,PW=PGW-2*MARGIN,PH=PGH-2*MARGIN;   // layout width in px (smaller = bigger text)
   const pageH=Math.floor(W*PH/PW);
   const ifr=document.createElement('iframe');
   ifr.style.cssText=`position:fixed;left:-20000px;top:0;width:${W}px;height:${pageH}px;border:0;`;
@@ -1404,18 +1404,25 @@ async function htmlToPdfBlob(html,onProgress,opts={}){
           if(n&&!/^(H[1-3]|P)$/.test(n.tagName)){const rb=n.getBoundingClientRect(),bt=rb.top+doc.documentElement.scrollTop;
             const end=Math.min(bt+rb.height,bt+260);if(end-top<pageH*0.5)boxes.push([top,end]);}}}
     });
-    const breaks=[0];let y=0;
+    // tables with a header row: when a page starts inside such a table, its header is repeated at the top
+    const tables=[...body.querySelectorAll('table')].map(t=>{const th=t.tHead;if(!th)return null;
+      const sc=doc.documentElement.scrollTop,rt=t.getBoundingClientRect(),rh=th.getBoundingClientRect();
+      return {top:rt.top+sc,bot:rt.bottom+sc,hTop:rh.top+sc,hBot:rh.bottom+sc,el:t};}).filter(t=>t&&t.hBot-t.hTop<pageH*0.3);
+    const headAt=y=>tables.find(t=>y>=t.hBot-1&&y<t.bot-4)||null;
+    const breaks=[0],heads=[null];let y=0;
     while(y<total-2){
-      let cut=y+pageH;
+      const hd=y>0?headAt(y):null;
+      let cut=y+pageH-(hd?hd.hBot-hd.hTop:0);
       const f=forced.filter(t=>t>y+20&&t<=cut);let isForced=false;if(f.length){cut=Math.min(...f);isForced=true;}
       if(isForced){} // a forced page break (e.g. photo annex) is kept exactly where it is
       else if(cut<total){
         let moved=true;
         while(moved){moved=false;for(const [t,b] of boxes){if(t<cut-1&&b>cut+1&&t>y+pageH*0.25){cut=t;moved=true;}}}
       }else cut=total;
-      breaks.push(cut);y=cut;
+      breaks.push(cut);heads.push(null);heads[breaks.length-2]=hd;y=cut;
     }
-    const pages=breaks.slice(1).map((b,i)=>[breaks[i],b]);
+    const pages=breaks.slice(1).map((b,i)=>[breaks[i],b,heads[i]]);
+    const headImg=new Map();
     const {jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'mm',format:'a4',orientation:L?'landscape':'portrait',compress:true});
     const SC=2.4,CHUNK=Math.max(1500,Math.floor(16e6/(W*SC*SC)));   // ≈ 280 dpi; canvas kept under 16 Mpx (tablets)
     let i=0;
@@ -1425,11 +1432,19 @@ async function htmlToPdfBlob(html,onProgress,opts={}){
       const top=pages[i][0],h=pages[j][1]-top;
       const canvas=await html2canvas(body,{x:0,y:top,width:W,height:h,windowWidth:W,scale:SC,backgroundColor:'#ffffff',logging:false,useCORS:true,scrollX:0,scrollY:0});
       for(let k=i;k<=j;k++){
-        const [a,b]=pages[k],pc=document.createElement('canvas');
-        pc.width=canvas.width;pc.height=Math.max(1,Math.round((b-a)*SC));
-        pc.getContext('2d').drawImage(canvas,0,Math.round((a-top)*SC),canvas.width,pc.height,0,0,pc.width,pc.height);
+        const [a,b,hd]=pages[k],pc=document.createElement('canvas');
+        let hc=null,hh=0;
+        if(hd){
+          if(!headImg.has(hd))headImg.set(hd,await html2canvas(body,{x:0,y:hd.hTop,width:W,height:hd.hBot-hd.hTop,windowWidth:W,scale:SC,backgroundColor:'#ffffff',logging:false,useCORS:true,scrollX:0,scrollY:0}));
+          hc=headImg.get(hd);hh=hc.height;
+        }
+        const bodyH=Math.max(1,Math.round((b-a)*SC));
+        pc.width=canvas.width;pc.height=hh+bodyH;
+        const g=pc.getContext('2d');
+        if(hc)g.drawImage(hc,0,0);
+        g.drawImage(canvas,0,Math.round((a-top)*SC),canvas.width,bodyH,0,hh,pc.width,bodyH);
         if(k>0)pdf.addPage();
-        pdf.addImage(pc.toDataURL('image/jpeg',0.8),'JPEG',MARGIN,MARGIN,PW,(b-a)*PW/W);
+        pdf.addImage(pc.toDataURL('image/jpeg',0.8),'JPEG',MARGIN,MARGIN,PW,pc.height/SC*PW/W);
         pdf.setFontSize(8);pdf.setTextColor(150);pdf.text(`${k+1} / ${pages.length}`,PGW-MARGIN,PGH-4,{align:'right'});
         if(onProgress)onProgress(k+1,pages.length);
       }
@@ -1448,9 +1463,18 @@ function overviewHtml(title,sub,innerHtml){
     body{margin:0;padding:0 6px;font-family:'Segoe UI',Arial,sans-serif}
     .matrix-scroll,[class*="scroll"]{max-height:none!important;height:auto!important;overflow:visible!important}
     th,td,thead,tr{position:static!important}
-    button,.cell-btn,.t-x{display:none!important}
+    button,.cell-btn,.t-x,.t-add{display:none!important}
+    /* bigger, clearer print */
+    .matrix-table th,.ovt th{background:#1a3a2a!important;color:#fff!important;font-size:16px!important;font-weight:800!important;padding:12px 8px!important;letter-spacing:.2px}
+    .matrix-table th .th-sub{font-size:12.5px!important;opacity:.9}.matrix-table th .th-count{font-size:12.5px!important}
+    .matrix-table td{font-size:14px!important}.matrix-table td.mod-name{font-size:16px!important}
+    .matrix-table td.mod-name span,.mod-prog{font-size:12px!important}
+    .tile .t-res{font-size:14.5px!important}.tile .t-date{font-size:13px!important}.tile .t-sys{font-size:11px!important}
+    .dev,.plan-chip{font-size:14px!important}
+    .matrix-legend,.matrix-legend span{font-size:13px!important}
+    .ovt{font-size:15px!important}.ovt td{padding:8px 10px!important}.ovt td div{font-size:12px!important}
     .ov-head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1a3a2a;padding:6px 0 8px;margin-bottom:12px}
-    .ov-head h1{font-size:20px;color:#1a3a2a;margin:0}.ov-head .s{font-size:12px;color:#666;margin-top:3px}.ov-head .d{font-size:11px;color:#888;text-align:right}
+    .ov-head h1{font-size:24px;color:#1a3a2a;margin:0}.ov-head .s{font-size:14px;color:#666;margin-top:3px}.ov-head .d{font-size:11px;color:#888;text-align:right}
   </style></head><body>
   <div class="ov-head"><div><h1>${title}</h1><div class="s">${sub}</div></div><div class="d">Nordic Homes — Quality Control<br>Printed ${stamp}</div></div>
   ${innerHtml.replace(/<p[^>]*>(?:(?!<\/p>)[\s\S])*\bTap (?:(?!<\/p>)[\s\S])*<\/p>/g,'')}</body></html>`;
@@ -1608,7 +1632,7 @@ async function saveOverviewPdf(title,sub,inner,fileBase,folderId,uploadFn){
   if(win)win.document.write('<p style="font-family:Arial;padding:30px;color:#555">Creating the overview PDF…</p>');
   try{
     setStatus('Creating overview PDF...');
-    const blob=await htmlToPdfBlob(overviewHtml(title,sub,inner),(k,n)=>setStatus(`Creating overview PDF page ${k}/${n}...`),{landscape:true});
+    const blob=await htmlToPdfBlob(overviewHtml(title,sub,inner),(k,n)=>setStatus(`Creating overview PDF page ${k}/${n}...`),{landscape:true,width:1050});
     const d=new Date(),p=n=>String(n).padStart(2,'0'),name=`${fileBase}_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.pdf`;
     let saved=false;
     try{await uploadFn(folderId,name,blob);saved=true;}catch(e){console.warn(e);alert('Overview could NOT be saved to OneDrive: '+e.message+'\nIt is downloaded instead.');}
@@ -1704,7 +1728,7 @@ function saveAllProtocols(){
 
 // ---- INIT ----
 // Version shown under the title: version number + when this file was uploaded (to see that an update is live)
-const APP_VERSION='3.26';
+const APP_VERSION='3.27';
 (function showVersion(){
   const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
   if(el)el.textContent=`v${APP_VERSION}`+(isNaN(d)?'':` · upd. ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`);
