@@ -1053,6 +1053,7 @@ function setFilter(f,btn){
 
 // ---- OVERVIEW ----
 function renderOverview(){
+  try{uzskSchedule();}catch(e){}
   const grid=document.getElementById('overview-grid');
   let html='';
   getProjectCfg().modules.forEach(n=>{
@@ -1341,6 +1342,69 @@ function autoSave(modName){
   autoSaveTimer=setTimeout(()=>{if(msConnected)flushDirty();},3000);
 }
 
+// ========== MODUĻU UZSKAITE → Excel (OneDrive: Nordic_QC3/Moduļu uzskaite.xlsx, table "Moduli") ==========
+// The app writes the QC dates of the open project into the module's row. It never overwrites what was typed by hand:
+// only empty cells, "S1/S2" placeholders, or a value this app itself wrote earlier are changed.
+const UZSK_FILE='Nordic_QC3/Moduļu uzskaite.xlsx',UZSK_TABLE='Moduli';
+let uzskTimer=null,uzskBusy=false,uzskAgain=false,uzskOff=false,uzskLastSig='';
+function uzskSerial(iso){const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||'');if(!m)return null;return Math.round((Date.UTC(+m[1],+m[2]-1,+m[3])-Date.UTC(1899,11,30))/864e5);}
+function uzskNorm(s){return String(s==null?'':s).toUpperCase().replace(/[\s_\-.]+/g,'');}
+function uzskColNum(s){let n=0;for(const ch of s)n=n*26+ch.charCodeAt(0)-64;return n;}
+function uzskColName(n){let s='';while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26);}return s;}
+function uzskSchedule(delay=5000){
+  if(typeof msConnected!=='undefined'&&!msConnected)return;
+  if(uzskOff)return;
+  clearTimeout(uzskTimer);uzskTimer=setTimeout(uzskRun,delay);
+}
+async function uzskRun(force){
+  if(uzskBusy){uzskAgain=true;return;}
+  let want;try{want=uzskDesired();}catch(e){console.warn('uzskaite',e);return;}
+  if(!want||!want.items.length)return;
+  const sig=JSON.stringify(want);if(!force&&sig===uzskLastSig)return;   // nothing new since the last run
+  uzskBusy=true;
+  try{
+    const token=await ensureToken();
+    const h={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+    const f=await fetch(`${GRAPH_BASE}/me/drive/root:/${UZSK_FILE.split('/').map(encodeURIComponent).join('/')}?$select=id`,{headers:h});
+    if(f.status===404){uzskOff=true;console.info('Moduļu uzskaite: file not found',UZSK_FILE);return;}
+    if(!f.ok)throw new Error('file '+f.status);
+    const base=`${GRAPH_BASE}/me/drive/items/${(await f.json()).id}/workbook`;
+    const rr=await fetch(`${base}/tables('${UZSK_TABLE}')/range?$select=address,values`,{headers:h});
+    if(!rr.ok)throw new Error('table '+rr.status);
+    const rg=await rr.json();
+    const mA=/^(.*)!\$?([A-Z]+)\$?(\d+)/.exec(rg.address||'');if(!mA)throw new Error('address '+rg.address);
+    const sheet=mA[1].replace(/^'|'$/g,'').replace(/''/g,"'"),c0=uzskColNum(mA[2]),r0=+mA[3];
+    const V=rg.values,hdr=V[0].map(x=>String(x).trim()),iP=hdr.indexOf('Projekts'),iM=hdr.indexOf('Modulis');
+    if(iP<0||iM<0)throw new Error('columns Projekts/Modulis not found');
+    let mine={};try{mine=JSON.parse(localStorage.getItem('uzsk_written')||'{}');}catch(e){}
+    const pre=uzskNorm(want.project);let n=0;
+    for(const it of want.items){
+      const ci=hdr.indexOf(it.col);if(ci<0)continue;
+      const rows=[];for(let r=1;r<V.length;r++)if(uzskNorm(V[r][iM])===uzskNorm(it.mod))rows.push(r);
+      const ri=rows.find(r=>uzskNorm(V[r][iP]).startsWith(pre))??(rows.length===1?rows[0]:undefined);
+      if(ri===undefined)continue;
+      const cur=V[ri][ci],key=`${want.project}|${it.mod}|${it.col}`;
+      if(cur===it.value)continue;
+      const empty=cur===''||cur==null||(typeof cur==='string'&&/^\s*(S1\s*S2\s*)?$/i.test(cur));
+      if(!(empty||mine[key]===cur))continue;               // typed by hand → leave it
+      if(it.value==='N/A'&&!empty)continue;
+      const body={values:[[it.value]]};if(typeof it.value==='number')body.numberFormat=[['dd.mm.yy']];
+      const w=await fetch(`${base}/worksheets('${encodeURIComponent(sheet.replace(/'/g,"''"))}')/range(address='${uzskColName(c0+ci)}${r0+ri}')`,
+        {method:'PATCH',headers:h,body:JSON.stringify(body)});
+      if(w.ok){mine[key]=it.value;V[ri][ci]=it.value;n++;}else console.warn('uzskaite write',it,w.status);
+    }
+    try{localStorage.setItem('uzsk_written',JSON.stringify(mine));}catch(e){}
+    uzskLastSig=sig;
+    if(n)setStatus(`Moduļu uzskaite updated ✓ (${n})`);
+  }catch(e){console.warn('Moduļu uzskaite',e);}
+  finally{uzskBusy=false;if(uzskAgain){uzskAgain=false;uzskSchedule(1000);}}
+}
+function uzskDesired(){   // QC-3: ACCEPTED module → date of the checklist
+  const items=[];
+  getProjectCfg().modules.forEach(m=>{const mod=modules[m];if(!mod||!mod.items||!mod.meta)return;
+    if(moduleOverall(mod)==='ACCEPTED'){const v=uzskSerial(mod.meta.date)||uzskSerial(new Date().toISOString());items.push({mod:m,col:'QC-3 Module Checklist',value:v});}});
+  return {project:currentProject,items};
+}
 // ========== PROTOCOL → PDF (same code in QC3, HVAC and QC-2 apps) ==========
 // The protocol HTML is laid out in a hidden frame, cut into A4 pages without splitting table rows / photos,
 // drawn with html2canvas and put into a PDF with jsPDF.
@@ -1743,7 +1807,7 @@ function saveAllProtocols(){
 
 // ---- INIT ----
 // Version shown under the title: version number + when this file was uploaded (to see that an update is live)
-const APP_VERSION='3.28';
+const APP_VERSION='3.30';
 (function showVersion(){
   const d=new Date(document.lastModified),p=n=>String(n).padStart(2,'0'),el=document.getElementById('app-version');
   if(el)el.textContent=`v${APP_VERSION}`+(isNaN(d)?'':` · upd. ${p(d.getDate())}.${p(d.getMonth()+1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`);
